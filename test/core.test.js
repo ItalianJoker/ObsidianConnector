@@ -66,10 +66,10 @@ describe('bindings', () => {
 describe('obsidian URIs', () => {
   it('builds an open URI with encoded vault and file', () => {
     const state = { vaultName: 'My Vault' };
-    const uri = Core.buildOpenUri(state, { filePath: 'Projects/Sito web.md' });
+    const uri = Core.buildOpenUri(state, { filePath: 'Projects/Website.md' });
     assert.equal(
       uri,
-      'obsidian://open?vault=My%20Vault&file=Projects%2FSito%20web',
+      'obsidian://open?vault=My%20Vault&file=Projects%2FWebsite',
     );
   });
 
@@ -81,24 +81,23 @@ describe('obsidian URIs', () => {
   it('builds a new-note URI with frontmatter content', () => {
     const uri = Core.buildNewUri(
       { vaultName: 'Work' },
-      { projectId: 'abc', filePath: 'Projects/Tesi.md' },
-      { id: 'abc', title: 'Tesi' },
-      'it',
+      { projectId: 'abc', filePath: 'Projects/Thesis.md' },
+      { id: 'abc', title: 'Thesis' },
     );
     assert.match(uri, /^obsidian:\/\/new\?/);
     assert.match(uri, /vault=Work/);
-    assert.match(uri, /file=Projects%2FTesi/);
+    assert.match(uri, /file=Projects%2FThesis/);
     assert.match(uri, /content=/);
     assert.match(decodeURIComponent(uri), /super-productivity-id: abc/);
-    assert.match(decodeURIComponent(uri), /Nota collegata/);
+    assert.match(decodeURIComponent(uri), /This note is linked/);
   });
 });
 
 describe('path helpers', () => {
   it('suggests a safe file path from the project title', () => {
     assert.equal(
-      Core.suggestFilePath('Sito / Launch*', 'Projects'),
-      'Projects/Sito - Launch-.md',
+      Core.suggestFilePath('Site / Launch*', 'Projects'),
+      'Projects/Site - Launch-.md',
     );
   });
 

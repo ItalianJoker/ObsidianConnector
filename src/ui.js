@@ -349,12 +349,8 @@
       }
 
       if (action === 'create') {
-        const locale =
-          typeof PluginAPI.getCurrentLanguage === 'function'
-            ? PluginAPI.getCurrentLanguage()
-            : '';
         await this.openUri(
-          Core.buildNewUri(this.state, binding, this.projectById(projectId), locale),
+          Core.buildNewUri(this.state, binding, this.projectById(projectId)),
           binding.filePath,
         );
         return;

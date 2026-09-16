@@ -1,55 +1,55 @@
 # Obsidian Connector
 
-Plugin per [Super Productivity](https://github.com/super-productivity/super-productivity) che permette di **agganciare un progetto a un file del vault Obsidian**.
+A [Super Productivity](https://github.com/super-productivity/super-productivity) plugin that **links a project to a file in your Obsidian vault**.
 
-Non sincronizza i task: crea un collegamento stabile progetto → nota, poi apre quella nota in Obsidian tramite URI (`obsidian://open`). Per il sync delle checkbox resta valido il plugin `sync.md`.
+It does not sync tasks. It stores a stable project → note mapping, then opens that note in Obsidian with `obsidian://open`. For checkbox sync, keep using `sync.md`.
 
-## Cosa puoi fare
+## Features
 
-- Impostare il **nome del vault** Obsidian
-- Collegare ogni progetto Super Productivity a un file Markdown relativo al vault, ad esempio `Projects/Sito web.md`
-- Aprire la nota da un pulsante nell'header del progetto, da un collegamento rapido o dal pannello laterale
-- Creare la nota nel vault se ancora non esiste (`obsidian://new`)
-- Copiare l'URI Obsidian o il wikilink `[[Projects/Sito web]]`
+- Set the Obsidian **vault name**
+- Link each Super Productivity project to a vault-relative Markdown file, for example `Projects/Website.md`
+- Open the note from a project header button, a shortcut, or the side panel
+- Create the note in the vault if it does not exist yet (`obsidian://new`)
+- Copy the Obsidian URI or a `[[Projects/Website]]` wiki link
 
-## Installazione
+## Install
 
-1. Scarica `dist/obsidian-connector.zip` (oppure esegui `npm run zip` in questo repo)
-2. In Super Productivity apri **Impostazioni → Plugin → Scegli file plugin**
-3. Seleziona lo ZIP e abilita il plugin
+1. Download `dist/obsidian-connector.zip` (or run `npm run zip` in this repo)
+2. In Super Productivity open **Settings → Plugins → Choose Plugin File**
+3. Select the ZIP and enable the plugin
 
-Lo ZIP deve avere `manifest.json` alla radice: è già fatto così dallo script di build.
+The ZIP has `manifest.json` at its root, as required by the plugin installer.
 
-Requisito: Super Productivity **14.0.0** o successiva. Funziona sul desktop e sulla web app; serve Obsidian installato sulla stessa macchina per aprire le note.
+Requires Super Productivity **14.0.0** or later. Works on desktop and the web app. Obsidian must be installed on the same machine to open notes.
 
-## Uso
+## Usage
 
-1. Apri il pannello **Obsidian Connector** (menu plugin / pannello laterale)
-2. Inserisci il **nome del vault** come appare in Obsidian (di solito il nome della cartella)
-3. Scegli un progetto Super Productivity
-4. Indica il percorso della nota relativo al vault, oppure premi **Suggerisci percorso**
-5. Premi **Collega**
+1. Open the **Obsidian Connector** panel (plugin menu / side panel)
+2. Enter the **vault name** as it appears in Obsidian (usually the folder name)
+3. Choose a Super Productivity project
+4. Enter the vault-relative note path, or click **Suggest path**
+5. Click **Link**
 
-Quando sei dentro un progetto collegato, il pulsante **Obsidian** nell'header apre la nota. **Crea nota** usa `obsidian://new` e scrive un frontmatter con l'id del progetto Super Productivity; se la nota esiste già, Obsidian la apre senza sovrascriverla.
+When you are inside a linked project, the **Obsidian** header button opens the note. **Create note** uses `obsidian://new` and writes frontmatter with the Super Productivity project id. If the note already exists, Obsidian opens it without overwriting.
 
-Puoi lasciare vuoto il nome del vault: in quel caso Obsidian apre l'ultimo vault usato.
+You can leave the vault name empty: Obsidian then opens the most recently used vault.
 
-## Sviluppo
+## Development
 
 ```bash
 npm test
 npm run zip
-npm run harness   # UI di prova su http://127.0.0.1:4173/
+npm run harness   # UI preview at http://127.0.0.1:4173/
 ```
 
-- `src/` — sorgente (logica condivisa, host `plugin.js`, UI iframe)
-- `plugin/` — file del plugin pronti da impacchettare
-- `test/` — test Node della logica di binding e degli URI Obsidian
+- `src/` — source (shared logic, host `plugin.js`, iframe UI)
+- `plugin/` — packagable plugin files
+- `test/` — Node tests for bindings and Obsidian URIs
 
-Il plugin usa solo le API documentate in [Develop a Plugin](https://github.com/super-productivity/super-productivity/wiki/2.15-Develop-a-Plugin) e in [`docs/plugin-development.md`](https://github.com/super-productivity/super-productivity/blob/master/docs/plugin-development.md): progetti, persistenza sincronizzata, snack/dialog, pannello laterale, pulsante sull'header del progetto, URI `obsidian://`.
+The plugin uses only APIs from [Develop a Plugin](https://github.com/super-productivity/super-productivity/wiki/2.15-Develop-a-Plugin) and [`docs/plugin-development.md`](https://github.com/super-productivity/super-productivity/blob/master/docs/plugin-development.md): projects, synced persistence, snacks/dialogs, side panel, project header button, and `obsidian://` URIs.
 
-Non richiede `nodeExecution`: non legge il disco. Il percorso della nota è relativo al vault e viene aperto da Obsidian.
+It does not request `nodeExecution` and does not read the disk. The note path is vault-relative and Obsidian opens it.
 
-## Licenza
+## License
 
 MIT

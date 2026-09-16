@@ -26,6 +26,6 @@
     "showIndexHtmlAsView"
   ],
   "i18n": {
-    "languages": ["en", "it"]
+    "languages": ["en"]
   }
 }

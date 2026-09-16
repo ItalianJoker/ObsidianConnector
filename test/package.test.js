@@ -23,7 +23,6 @@ describe('plugin package', () => {
     assert.ok(files.includes('index.html'));
     assert.ok(files.includes('icon.svg'));
     assert.ok(files.includes('i18n/en.json'));
-    assert.ok(files.includes('i18n/it.json'));
     assert.ok(!files.some((name) => name.startsWith('plugin/')));
   });
 

@@ -199,22 +199,8 @@
     })}`;
   }
 
-  function noteTemplate({ projectId, projectTitle, locale }) {
+  function noteTemplate({ projectId, projectTitle }) {
     const title = projectTitle || 'Untitled project';
-    const isIt = String(locale || '').toLowerCase().startsWith('it');
-    if (isIt) {
-      return [
-        '---',
-        `super-productivity-id: ${projectId || ''}`,
-        `super-productivity-project: ${title}`,
-        '---',
-        '',
-        `# ${title}`,
-        '',
-        'Nota collegata a un progetto di Super Productivity.',
-        '',
-      ].join('\n');
-    }
     return [
       '---',
       `super-productivity-id: ${projectId || ''}`,
@@ -228,7 +214,7 @@
     ].join('\n');
   }
 
-  function buildNewUri(state, binding, project, locale) {
+  function buildNewUri(state, binding, project) {
     const filePath = normalizeVaultFilePath(binding && binding.filePath);
     if (!filePath) {
       return null;
@@ -237,7 +223,6 @@
     const content = noteTemplate({
       projectId: binding.projectId || (project && project.id),
       projectTitle: (project && project.title) || stripMarkdownExtension(filePath),
-      locale,
     });
     return `obsidian://new?${queryString({
       vault: vaultName,

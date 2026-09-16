@@ -469,22 +469,8 @@ body {
     })}`;
   }
 
-  function noteTemplate({ projectId, projectTitle, locale }) {
+  function noteTemplate({ projectId, projectTitle }) {
     const title = projectTitle || 'Untitled project';
-    const isIt = String(locale || '').toLowerCase().startsWith('it');
-    if (isIt) {
-      return [
-        '---',
-        `super-productivity-id: ${projectId || ''}`,
-        `super-productivity-project: ${title}`,
-        '---',
-        '',
-        `# ${title}`,
-        '',
-        'Nota collegata a un progetto di Super Productivity.',
-        '',
-      ].join('\n');
-    }
     return [
       '---',
       `super-productivity-id: ${projectId || ''}`,
@@ -498,7 +484,7 @@ body {
     ].join('\n');
   }
 
-  function buildNewUri(state, binding, project, locale) {
+  function buildNewUri(state, binding, project) {
     const filePath = normalizeVaultFilePath(binding && binding.filePath);
     if (!filePath) {
       return null;
@@ -507,7 +493,6 @@ body {
     const content = noteTemplate({
       projectId: binding.projectId || (project && project.id),
       projectTitle: (project && project.title) || stripMarkdownExtension(filePath),
-      locale,
     });
     return `obsidian://new?${queryString({
       vault: vaultName,
@@ -1027,12 +1012,8 @@ body {
       }
 
       if (action === 'create') {
-        const locale =
-          typeof PluginAPI.getCurrentLanguage === 'function'
-            ? PluginAPI.getCurrentLanguage()
-            : '';
         await this.openUri(
-          Core.buildNewUri(this.state, binding, this.projectById(projectId), locale),
+          Core.buildNewUri(this.state, binding, this.projectById(projectId)),
           binding.filePath,
         );
         return;
