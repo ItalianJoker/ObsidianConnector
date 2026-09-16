@@ -1,6 +1,6 @@
 {
   "name": "obsidian-connector",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Super Productivity plugin that links projects to files in an Obsidian vault.",
   "license": "MIT",

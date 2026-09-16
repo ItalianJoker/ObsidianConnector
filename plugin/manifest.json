@@ -1,7 +1,7 @@
 {
   "id": "obsidian-connector",
   "name": "Obsidian Connector",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "manifestVersion": 1,
   "minSupVersion": "14.0.0",
   "description": "Link Super Productivity projects to Markdown files in an Obsidian vault.",

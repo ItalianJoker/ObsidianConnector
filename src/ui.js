@@ -37,7 +37,8 @@
     }
 
     t(key, fallback, params) {
-      return Core.t(PluginAPI, key, fallback, params);
+      const value = Core.t(PluginAPI, key, fallback, params);
+      return typeof value === 'string' && value ? value : fallback || key;
     }
 
     async init() {
@@ -52,13 +53,13 @@
       qs('title').textContent = this.t('PLUGIN.NAME', 'Obsidian Connector');
       qs('lede').textContent = this.t(
         'UI.LEDE',
-        'Link each Super Productivity project to a Markdown file in your Obsidian vault. Opening the link launches that note in Obsidian.',
+        'Link a Super Productivity project to a note in your Obsidian vault. Opening uses obsidian://, not a file path.',
       );
       qs('vault-heading').textContent = this.t('UI.VAULT', 'Obsidian vault');
       qs('vault-name-label').textContent = this.t('UI.VAULT_NAME', 'Vault name');
       qs('vault-name-hint').textContent = this.t(
         'UI.VAULT_NAME_HINT',
-        'Use the name shown in Obsidian (usually the vault folder name). Leave empty to open the most recently used vault.',
+        'The vault name shown in Obsidian. Leave empty to use the last vault.',
       );
       qs('default-folder-label').textContent = this.t(
         'UI.DEFAULT_FOLDER',
@@ -66,7 +67,7 @@
       );
       qs('default-folder-hint').textContent = this.t(
         'UI.DEFAULT_FOLDER_HINT',
-        'Used when suggesting a path for a new link, for example Projects/My project.md.',
+        'Folder used when suggesting a path, e.g. Projects/My project.md.',
       );
       qs('save-vault').textContent = this.t('UI.SAVE', 'Save');
       qs('link-heading').textContent = this.t('UI.NEW_LINK', 'Link a project');
@@ -77,7 +78,7 @@
       );
       qs('file-path-hint').textContent = this.t(
         'UI.FILE_PATH_HINT',
-        'Relative to the vault root. Example: Projects/Website.md',
+        'Path inside the vault, e.g. Projects/Website.md',
       );
       qs('suggest-path').textContent = this.t('UI.SUGGEST', 'Suggest path');
       qs('save-binding').textContent = this.t('UI.LINK', 'Link');

@@ -345,23 +345,33 @@
     }
   }
 
+  function interpolate(template, params) {
+    if (template == null) {
+      return '';
+    }
+    const text = String(template);
+    if (!params) {
+      return text;
+    }
+    return text.replace(/\{\{(\w+)\}\}/g, (_, name) =>
+      params[name] == null ? '' : String(params[name]),
+    );
+  }
+
   function t(api, key, fallback, params) {
     try {
       if (api && typeof api.translate === 'function') {
         const translated = api.translate(key, params);
-        if (translated && translated !== key) {
-          return translated;
+        // Super Productivity's iframe translate() can return a Promise.
+        // Never write that into the DOM — it becomes "[object Promise]".
+        if (typeof translated === 'string' && translated && translated !== key) {
+          return interpolate(translated, params);
         }
       }
     } catch {
-      // fall through
+      // fall through to the English fallback
     }
-    if (fallback && params) {
-      return String(fallback).replace(/\{\{(\w+)\}\}/g, (_, name) =>
-        params[name] == null ? '' : String(params[name]),
-      );
-    }
-    return fallback || key;
+    return interpolate(fallback || key, params);
   }
 
   return {

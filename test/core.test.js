@@ -117,3 +117,32 @@ describe('path helpers', () => {
     );
   });
 });
+
+describe('t', () => {
+  it('uses the English fallback when translate returns a Promise', () => {
+    const api = {
+      translate() {
+        return Promise.resolve('Translated');
+      },
+    };
+    const result = Core.t(api, 'UI.SAVE', 'Save');
+    assert.equal(result, 'Save');
+    assert.equal(String(result), 'Save');
+  });
+
+  it('uses a string translation when the host returns one', () => {
+    const api = {
+      translate(key) {
+        return key === 'UI.SAVE' ? 'Save settings' : key;
+      },
+    };
+    assert.equal(Core.t(api, 'UI.SAVE', 'Save'), 'Save settings');
+  });
+
+  it('interpolates fallback params', () => {
+    assert.equal(
+      Core.t(null, 'MSG.OPENING_NOTE', 'Opening {{file}}…', { file: 'Note.md' }),
+      'Opening Note.md…',
+    );
+  });
+});

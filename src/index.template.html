@@ -12,7 +12,10 @@
     <div class="wrap page-fade">
       <header class="header">
         <h1 id="title">Obsidian Connector</h1>
-        <p id="lede" class="lede text-muted"></p>
+        <p id="lede" class="lede text-muted">
+          Link a Super Productivity project to a note in your Obsidian vault.
+          Opening uses obsidian://, not a file path.
+        </p>
       </header>
 
       <p id="status" class="status" aria-live="polite"></p>
@@ -23,8 +26,8 @@
           <span id="banner-detail" class="text-muted"></span>
         </div>
         <div class="actions">
-          <button id="banner-open" type="button" class="primary hidden">Open</button>
-          <button id="banner-link" type="button">Link</button>
+          <button id="banner-open" type="button" class="primary hidden">Open in Obsidian</button>
+          <button id="banner-link" type="button">Link this project</button>
         </div>
       </section>
 
@@ -40,7 +43,9 @@
             placeholder="My Vault"
           />
         </div>
-        <p id="vault-name-hint" class="hint text-muted"></p>
+        <p id="vault-name-hint" class="hint text-muted">
+          The vault name shown in Obsidian. Leave empty to use the last vault.
+        </p>
         <div class="field">
           <label id="default-folder-label" for="default-folder">Default folder</label>
           <input
@@ -51,7 +56,9 @@
             placeholder="Projects"
           />
         </div>
-        <p id="default-folder-hint" class="hint text-muted"></p>
+        <p id="default-folder-hint" class="hint text-muted">
+          Folder used when suggesting a path, e.g. Projects/My project.md.
+        </p>
         <div class="row">
           <button id="save-vault" type="button" class="primary">Save</button>
         </div>
@@ -73,7 +80,9 @@
             placeholder="Projects/My project.md"
           />
         </div>
-        <p id="file-path-hint" class="hint text-muted"></p>
+        <p id="file-path-hint" class="hint text-muted">
+          Path inside the vault, e.g. Projects/Website.md
+        </p>
         <div class="row">
           <button id="suggest-path" type="button">Suggest path</button>
           <button id="save-binding" type="button" class="primary">Link</button>

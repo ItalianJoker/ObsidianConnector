@@ -46,7 +46,7 @@ The ZIP has `manifest.json` at its root, as required by the plugin installer.
 
 Requires Super Productivity **14.0.0** or later. Works on desktop and the web app. Obsidian must be installed on the same machine to open notes.
 
-To build the ZIP locally: `npm run zip` (writes `dist/obsidian-connector.zip` and `dist/obsidian-connector-1.0.0.zip`).
+To build the ZIP locally: `npm run zip` (writes `dist/obsidian-connector.zip` and a versioned `dist/obsidian-connector-<version>.zip`).
 
 ## Usage
 
@@ -64,6 +64,7 @@ Release ZIPs are published on [GitHub Releases](https://github.com/ItalianJoker/
 
 | Version | Notes |
 | --- | --- |
+| [v1.0.1](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.0.1) | Fix side-panel labels (`[object Promise]`) |
 | [v1.0.0](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.0.0) | First release: project ↔ Obsidian note linking via `obsidian://` |
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list.

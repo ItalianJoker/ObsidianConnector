@@ -193,7 +193,10 @@ body {
     <div class="wrap page-fade">
       <header class="header">
         <h1 id="title">Obsidian Connector</h1>
-        <p id="lede" class="lede text-muted"></p>
+        <p id="lede" class="lede text-muted">
+          Link a Super Productivity project to a note in your Obsidian vault.
+          Opening uses obsidian://, not a file path.
+        </p>
       </header>
 
       <p id="status" class="status" aria-live="polite"></p>
@@ -204,8 +207,8 @@ body {
           <span id="banner-detail" class="text-muted"></span>
         </div>
         <div class="actions">
-          <button id="banner-open" type="button" class="primary hidden">Open</button>
-          <button id="banner-link" type="button">Link</button>
+          <button id="banner-open" type="button" class="primary hidden">Open in Obsidian</button>
+          <button id="banner-link" type="button">Link this project</button>
         </div>
       </section>
 
@@ -221,7 +224,9 @@ body {
             placeholder="My Vault"
           />
         </div>
-        <p id="vault-name-hint" class="hint text-muted"></p>
+        <p id="vault-name-hint" class="hint text-muted">
+          The vault name shown in Obsidian. Leave empty to use the last vault.
+        </p>
         <div class="field">
           <label id="default-folder-label" for="default-folder">Default folder</label>
           <input
@@ -232,7 +237,9 @@ body {
             placeholder="Projects"
           />
         </div>
-        <p id="default-folder-hint" class="hint text-muted"></p>
+        <p id="default-folder-hint" class="hint text-muted">
+          Folder used when suggesting a path, e.g. Projects/My project.md.
+        </p>
         <div class="row">
           <button id="save-vault" type="button" class="primary">Save</button>
         </div>
@@ -254,7 +261,9 @@ body {
             placeholder="Projects/My project.md"
           />
         </div>
-        <p id="file-path-hint" class="hint text-muted"></p>
+        <p id="file-path-hint" class="hint text-muted">
+          Path inside the vault, e.g. Projects/Website.md
+        </p>
         <div class="row">
           <button id="suggest-path" type="button">Suggest path</button>
           <button id="save-binding" type="button" class="primary">Link</button>
@@ -615,23 +624,33 @@ body {
     }
   }
 
+  function interpolate(template, params) {
+    if (template == null) {
+      return '';
+    }
+    const text = String(template);
+    if (!params) {
+      return text;
+    }
+    return text.replace(/\{\{(\w+)\}\}/g, (_, name) =>
+      params[name] == null ? '' : String(params[name]),
+    );
+  }
+
   function t(api, key, fallback, params) {
     try {
       if (api && typeof api.translate === 'function') {
         const translated = api.translate(key, params);
-        if (translated && translated !== key) {
-          return translated;
+        // Super Productivity's iframe translate() can return a Promise.
+        // Never write that into the DOM — it becomes "[object Promise]".
+        if (typeof translated === 'string' && translated && translated !== key) {
+          return interpolate(translated, params);
         }
       }
     } catch {
-      // fall through
+      // fall through to the English fallback
     }
-    if (fallback && params) {
-      return String(fallback).replace(/\{\{(\w+)\}\}/g, (_, name) =>
-        params[name] == null ? '' : String(params[name]),
-      );
-    }
-    return fallback || key;
+    return interpolate(fallback || key, params);
   }
 
   return {
@@ -700,7 +719,8 @@ body {
     }
 
     t(key, fallback, params) {
-      return Core.t(PluginAPI, key, fallback, params);
+      const value = Core.t(PluginAPI, key, fallback, params);
+      return typeof value === 'string' && value ? value : fallback || key;
     }
 
     async init() {
@@ -715,13 +735,13 @@ body {
       qs('title').textContent = this.t('PLUGIN.NAME', 'Obsidian Connector');
       qs('lede').textContent = this.t(
         'UI.LEDE',
-        'Link each Super Productivity project to a Markdown file in your Obsidian vault. Opening the link launches that note in Obsidian.',
+        'Link a Super Productivity project to a note in your Obsidian vault. Opening uses obsidian://, not a file path.',
       );
       qs('vault-heading').textContent = this.t('UI.VAULT', 'Obsidian vault');
       qs('vault-name-label').textContent = this.t('UI.VAULT_NAME', 'Vault name');
       qs('vault-name-hint').textContent = this.t(
         'UI.VAULT_NAME_HINT',
-        'Use the name shown in Obsidian (usually the vault folder name). Leave empty to open the most recently used vault.',
+        'The vault name shown in Obsidian. Leave empty to use the last vault.',
       );
       qs('default-folder-label').textContent = this.t(
         'UI.DEFAULT_FOLDER',
@@ -729,7 +749,7 @@ body {
       );
       qs('default-folder-hint').textContent = this.t(
         'UI.DEFAULT_FOLDER_HINT',
-        'Used when suggesting a path for a new link, for example Projects/My project.md.',
+        'Folder used when suggesting a path, e.g. Projects/My project.md.',
       );
       qs('save-vault').textContent = this.t('UI.SAVE', 'Save');
       qs('link-heading').textContent = this.t('UI.NEW_LINK', 'Link a project');
@@ -740,7 +760,7 @@ body {
       );
       qs('file-path-hint').textContent = this.t(
         'UI.FILE_PATH_HINT',
-        'Relative to the vault root. Example: Projects/Website.md',
+        'Path inside the vault, e.g. Projects/Website.md',
       );
       qs('suggest-path').textContent = this.t('UI.SUGGEST', 'Suggest path');
       qs('save-binding').textContent = this.t('UI.LINK', 'Link');
