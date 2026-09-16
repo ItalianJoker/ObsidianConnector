@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="Obsidian Connector">
+  <path fill="#7c5cbf" d="M12.2 2.3 4.8 7.1c-.5.3-.8.9-.7 1.5l1.8 11c.1.7.7 1.2 1.4 1.2h9.4c.7 0 1.3-.5 1.4-1.2l1.8-11c.1-.6-.2-1.2-.7-1.5l-7.4-4.8c-.5-.3-1.1-.3-1.6 0z"/>
+  <path fill="#f4f0ff" d="M12 5.2 8.2 14.6h2.1l.7-2h2l.7 2h2.1L12 5.2zm.9 5.7h-1.8L12 8.1l.9 2.8z"/>
+  <circle cx="19.2" cy="18.6" r="3.3" fill="#3d5afe"/>
+  <path fill="#fff" d="M18.3 17.3h1.8v3h-1.8v-3zm.3-1.6h1.2v1.1h-1.2v-1.1z"/>
+</svg>

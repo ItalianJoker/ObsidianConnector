@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Obsidian Connector</title>
+    <style>
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--divider-color, #c5c5c5);
+  background: var(--card-bg, #fff);
+  color: inherit;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+button.primary {
+  background: var(--c-primary, #3d5afe);
+  border-color: var(--c-primary, #3d5afe);
+  color: #fff;
+}
+
+button.danger {
+  color: var(--c-warn, #c62828);
+}
+
+input,
+select {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--divider-color, #c5c5c5);
+  background: var(--bg, #fff);
+  color: inherit;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.card {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--divider-color, #e0e0e0);
+  border-radius: var(--card-border-radius, 10px);
+  box-shadow: var(--whiteframe-shadow-1dp, 0 1px 3px rgba(0, 0, 0, 0.08));
+  padding: var(--s2, 16px);
+  margin-bottom: var(--s2, 16px);
+}
+
+.text-muted {
+  color: var(--text-color-muted, #777);
+}
+
+body {
+  padding: var(--s2, 16px);
+  font-family: var(--font-primary-stack, system-ui, sans-serif);
+  color: var(--text-color, inherit);
+  background: transparent;
+}
+
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: var(--s2, 16px);
+}
+
+.header h1 {
+  margin: 0 0 var(--s-quarter, 4px);
+  font-size: 1.35rem;
+}
+
+.lede {
+  margin: 0;
+}
+
+.card h2 {
+  margin: 0 0 var(--s, 8px);
+  font-size: 1.05rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-quarter, 4px);
+  margin-bottom: var(--s, 8px);
+}
+
+.field label {
+  font-size: 0.85em;
+  color: var(--text-color-muted, #777);
+}
+
+.hint {
+  margin: 0 0 var(--s, 8px);
+  font-size: 0.8em;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s, 8px);
+  align-items: center;
+}
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s, 8px);
+  align-items: center;
+  border-left: 3px solid var(--c-primary, #5b7fff);
+}
+
+.banner strong {
+  display: block;
+}
+
+.bindings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s, 8px);
+}
+
+.binding {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-half, 6px);
+}
+
+.binding-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s-half, 6px);
+  font-weight: 600;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-primary, #5b7fff);
+  flex: 0 0 auto;
+}
+
+.path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-half, 6px);
+}
+
+.empty,
+.status {
+  margin: 0;
+}
+
+.status[data-tone='success'] {
+  color: var(--c-primary, #2e7d32);
+}
+
+.status[data-tone='error'] {
+  color: var(--c-warn, #c62828);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.danger {
+  color: var(--c-warn, #c62828);
+}
+
+    </style>
+  </head>
+  <body>
+    <div class="wrap page-fade">
+      <header class="header">
+        <h1 id="title">Obsidian Connector</h1>
+        <p id="lede" class="lede text-muted"></p>
+      </header>
+
+      <p id="status" class="status" aria-live="polite"></p>
+
+      <section id="current-banner" class="card banner hidden">
+        <div>
+          <strong id="banner-title"></strong>
+          <span id="banner-detail" class="text-muted"></span>
+        </div>
+        <div class="actions">
+          <button id="banner-open" type="button" class="primary hidden">Open</button>
+          <button id="banner-link" type="button">Link</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 id="vault-heading">Obsidian vault</h2>
+        <div class="field">
+          <label id="vault-name-label" for="vault-name">Vault name</label>
+          <input
+            id="vault-name"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="My Vault"
+          />
+        </div>
+        <p id="vault-name-hint" class="hint text-muted"></p>
+        <div class="field">
+          <label id="default-folder-label" for="default-folder">Default folder</label>
+          <input
+            id="default-folder"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Projects"
+          />
+        </div>
+        <p id="default-folder-hint" class="hint text-muted"></p>
+        <div class="row">
+          <button id="save-vault" type="button" class="primary">Save</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 id="link-heading">Link a project</h2>
+        <div class="field">
+          <label id="project-label" for="project-select">Project</label>
+          <select id="project-select"></select>
+        </div>
+        <div class="field">
+          <label id="file-path-label" for="file-path">Note path</label>
+          <input
+            id="file-path"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Projects/My project.md"
+          />
+        </div>
+        <p id="file-path-hint" class="hint text-muted"></p>
+        <div class="row">
+          <button id="suggest-path" type="button">Suggest path</button>
+          <button id="save-binding" type="button" class="primary">Link</button>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="list-heading">Linked projects</h2>
+        <div id="bindings" class="bindings"></div>
+      </section>
+    </div>
+
+    <script>
+/**
+ * Shared, DOM-light helpers for the Obsidian Connector plugin.
+ * Loaded in Node tests (CommonJS) and concatenated into plugin.js / index.html.
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory();
+  } else {
+    root.ObsidianConnectorCore = factory();
+  }
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  const STORAGE_VERSION = 1;
+  const DEFAULT_FOLDER = 'Projects';
+  const ILLEGAL_NAME_CHARS = /[\\/:*?"<>|]/g;
+
+  function createEmptyState() {
+    return {
+      version: STORAGE_VERSION,
+      vaultName: '',
+      defaultFolder: DEFAULT_FOLDER,
+      bindings: [],
+    };
+  }
+
+  function isPlainObject(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  function parseState(raw) {
+    const empty = createEmptyState();
+    if (raw == null || raw === '') {
+      return empty;
+    }
+
+    let parsed = raw;
+    if (typeof raw === 'string') {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        return empty;
+      }
+    }
+    if (!isPlainObject(parsed)) {
+      return empty;
+    }
+
+    const vaultName = typeof parsed.vaultName === 'string' ? parsed.vaultName.trim() : '';
+    const defaultFolder =
+      typeof parsed.defaultFolder === 'string' && parsed.defaultFolder.trim()
+        ? normalizeVaultFilePath(parsed.defaultFolder)
+        : DEFAULT_FOLDER;
+
+    const bindings = Array.isArray(parsed.bindings)
+      ? parsed.bindings
+          .map(normalizeBinding)
+          .filter(Boolean)
+      : [];
+
+    const byProject = new Map();
+    for (const binding of bindings) {
+      byProject.set(binding.projectId, binding);
+    }
+
+    return {
+      version: STORAGE_VERSION,
+      vaultName,
+      defaultFolder,
+      bindings: Array.from(byProject.values()),
+    };
+  }
+
+  function normalizeBinding(binding) {
+    if (!isPlainObject(binding)) {
+      return null;
+    }
+    const projectId = typeof binding.projectId === 'string' ? binding.projectId.trim() : '';
+    if (!projectId) {
+      return null;
+    }
+    const filePath = normalizeVaultFilePath(binding.filePath);
+    if (!filePath) {
+      return null;
+    }
+    const createdAt =
+      typeof binding.createdAt === 'number' && Number.isFinite(binding.createdAt)
+        ? binding.createdAt
+        : Date.now();
+    const updatedAt =
+      typeof binding.updatedAt === 'number' && Number.isFinite(binding.updatedAt)
+        ? binding.updatedAt
+        : createdAt;
+    return { projectId, filePath, createdAt, updatedAt };
+  }
+
+  function serializeState(state) {
+    return JSON.stringify(parseState(state));
+  }
+
+  /**
+   * Vault-relative path: forward slashes, no leading slash, no `..` segments.
+   * Keeps a trailing `.md` if the user provided one.
+   */
+  function normalizeVaultFilePath(filePath) {
+    if (typeof filePath !== 'string') {
+      return '';
+    }
+    let path = filePath.trim().replace(/\\/g, '/');
+    if (!path) {
+      return '';
+    }
+    if (/^[a-zA-Z]:/.test(path) || path.startsWith('//')) {
+      return '';
+    }
+    path = path.replace(/^\/+/, '');
+    const parts = [];
+    for (const part of path.split('/')) {
+      if (!part || part === '.') {
+        continue;
+      }
+      if (part === '..') {
+        return '';
+      }
+      parts.push(part);
+    }
+    return parts.join('/');
+  }
+
+  function validateFilePath(filePath) {
+    const normalized = normalizeVaultFilePath(filePath);
+    if (!normalized) {
+      return {
+        ok: false,
+        message:
+          'Enter a vault-relative path such as Projects/My note.md (no absolute paths or ..).',
+      };
+    }
+    return { ok: true, path: normalized };
+  }
+
+  function stripMarkdownExtension(filePath) {
+    return String(filePath || '').replace(/\.md$/i, '');
+  }
+
+  function withMarkdownExtension(filePath) {
+    const normalized = normalizeVaultFilePath(filePath);
+    if (!normalized) {
+      return '';
+    }
+    return /\.md$/i.test(normalized) ? normalized : `${normalized}.md`;
+  }
+
+  function sanitizeNoteTitle(title) {
+    const cleaned = String(title || '')
+      .trim()
+      .replace(ILLEGAL_NAME_CHARS, '-')
+      .replace(/\s+/g, ' ')
+      .replace(/-+/g, '-')
+      .replace(/^\.+$/, '')
+      .replace(/[. ]+$/g, '');
+    return cleaned || 'Untitled';
+  }
+
+  function suggestFilePath(projectTitle, defaultFolder) {
+    const folder = normalizeVaultFilePath(defaultFolder || DEFAULT_FOLDER);
+    const name = `${sanitizeNoteTitle(projectTitle)}.md`;
+    return folder ? `${folder}/${name}` : name;
+  }
+
+  function wikiLink(filePath) {
+    const normalized = normalizeVaultFilePath(filePath);
+    if (!normalized) {
+      return '';
+    }
+    return `[[${stripMarkdownExtension(normalized)}]]`;
+  }
+
+  function queryString(params) {
+    const parts = [];
+    for (const [key, value] of Object.entries(params)) {
+      if (value == null || value === '') {
+        continue;
+      }
+      parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+    }
+    return parts.join('&');
+  }
+
+  function buildOpenUri(state, binding) {
+    const filePath = normalizeVaultFilePath(binding && binding.filePath);
+    if (!filePath) {
+      return null;
+    }
+    const vaultName = (state && state.vaultName) || '';
+    return `obsidian://open?${queryString({
+      vault: vaultName,
+      file: stripMarkdownExtension(filePath),
+    })}`;
+  }
+
+  function noteTemplate({ projectId, projectTitle, locale }) {
+    const title = projectTitle || 'Untitled project';
+    const isIt = String(locale || '').toLowerCase().startsWith('it');
+    if (isIt) {
+      return [
+        '---',
+        `super-productivity-id: ${projectId || ''}`,
+        `super-productivity-project: ${title}`,
+        '---',
+        '',
+        `# ${title}`,
+        '',
+        'Nota collegata a un progetto di Super Productivity.',
+        '',
+      ].join('\n');
+    }
+    return [
+      '---',
+      `super-productivity-id: ${projectId || ''}`,
+      `super-productivity-project: ${title}`,
+      '---',
+      '',
+      `# ${title}`,
+      '',
+      'This note is linked to a Super Productivity project.',
+      '',
+    ].join('\n');
+  }
+
+  function buildNewUri(state, binding, project, locale) {
+    const filePath = normalizeVaultFilePath(binding && binding.filePath);
+    if (!filePath) {
+      return null;
+    }
+    const vaultName = (state && state.vaultName) || '';
+    const content = noteTemplate({
+      projectId: binding.projectId || (project && project.id),
+      projectTitle: (project && project.title) || stripMarkdownExtension(filePath),
+      locale,
+    });
+    return `obsidian://new?${queryString({
+      vault: vaultName,
+      file: stripMarkdownExtension(filePath),
+      content,
+    })}`;
+  }
+
+  function getBinding(state, projectId) {
+    if (!state || !projectId) {
+      return null;
+    }
+    return state.bindings.find((binding) => binding.projectId === projectId) || null;
+  }
+
+  function upsertBinding(state, projectId, filePath, now) {
+    const next = parseState(state);
+    const validated = validateFilePath(filePath);
+    if (!projectId || !validated.ok) {
+      return { ok: false, state: next, message: validated.message || 'Missing project.' };
+    }
+    const timestamp = typeof now === 'number' ? now : Date.now();
+    const existing = getBinding(next, projectId);
+    const binding = {
+      projectId,
+      filePath: validated.path,
+      createdAt: existing ? existing.createdAt : timestamp,
+      updatedAt: timestamp,
+    };
+    next.bindings = next.bindings.filter((item) => item.projectId !== projectId);
+    next.bindings.push(binding);
+    next.bindings.sort((a, b) => a.filePath.localeCompare(b.filePath));
+    return { ok: true, state: next, binding };
+  }
+
+  function removeBinding(state, projectId) {
+    const next = parseState(state);
+    next.bindings = next.bindings.filter((item) => item.projectId !== projectId);
+    return next;
+  }
+
+  function updateVaultSettings(state, { vaultName, defaultFolder }) {
+    const next = parseState(state);
+    if (typeof vaultName === 'string') {
+      next.vaultName = vaultName.trim();
+    }
+    if (typeof defaultFolder === 'string') {
+      const folder = normalizeVaultFilePath(defaultFolder);
+      next.defaultFolder = folder || DEFAULT_FOLDER;
+    }
+    return next;
+  }
+
+  function visibleProjects(projects) {
+    return (projects || []).filter((project) => project && !project.isArchived && !project.isHiddenFromMenu);
+  }
+
+  function openExternalUri(uri) {
+    if (!uri || typeof uri !== 'string') {
+      return { ok: false, uri: '', copied: false };
+    }
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return { ok: false, uri, copied: false };
+    }
+
+    try {
+      const opened = window.open(uri, '_blank');
+      if (opened) {
+        return { ok: true, uri, copied: false };
+      }
+    } catch {
+      // fall through
+    }
+
+    try {
+      const anchor = document.createElement('a');
+      anchor.href = uri;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      return { ok: true, uri, copied: false };
+    } catch {
+      // fall through
+    }
+
+    return { ok: false, uri, copied: false };
+  }
+
+  async function copyText(text) {
+    if (text == null) {
+      return false;
+    }
+    const value = String(text);
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return true;
+      } catch {
+        // fall through
+      }
+    }
+    if (typeof document === 'undefined') {
+      return false;
+    }
+    try {
+      const area = document.createElement('textarea');
+      area.value = value;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.left = '-9999px';
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand('copy');
+      area.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  function t(api, key, fallback, params) {
+    try {
+      if (api && typeof api.translate === 'function') {
+        const translated = api.translate(key, params);
+        if (translated && translated !== key) {
+          return translated;
+        }
+      }
+    } catch {
+      // fall through
+    }
+    if (fallback && params) {
+      return String(fallback).replace(/\{\{(\w+)\}\}/g, (_, name) =>
+        params[name] == null ? '' : String(params[name]),
+      );
+    }
+    return fallback || key;
+  }
+
+  return {
+    STORAGE_VERSION,
+    DEFAULT_FOLDER,
+    createEmptyState,
+    parseState,
+    serializeState,
+    normalizeVaultFilePath,
+    validateFilePath,
+    stripMarkdownExtension,
+    withMarkdownExtension,
+    sanitizeNoteTitle,
+    suggestFilePath,
+    wikiLink,
+    buildOpenUri,
+    buildNewUri,
+    noteTemplate,
+    getBinding,
+    upsertBinding,
+    removeBinding,
+    updateVaultSettings,
+    visibleProjects,
+    openExternalUri,
+    copyText,
+    t,
+  };
+});
+
+/* Iframe UI. Concatenated after core.js inside index.html. */
+(function () {
+  'use strict';
+
+  const Core = globalThis.ObsidianConnectorCore;
+
+  function qs(id) {
+    return document.getElementById(id);
+  }
+
+  function escapeHtml(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function waitForPluginApi() {
+    if (typeof PluginAPI !== 'undefined' && Core) {
+      start();
+      return;
+    }
+    setTimeout(waitForPluginApi, 50);
+  }
+
+  async function start() {
+    const ui = new ConnectorUi();
+    await ui.init();
+  }
+
+  class ConnectorUi {
+    constructor() {
+      this.state = Core.createEmptyState();
+      this.projects = [];
+      this.context = null;
+    }
+
+    t(key, fallback, params) {
+      return Core.t(PluginAPI, key, fallback, params);
+    }
+
+    async init() {
+      this.bindEvents();
+      this.applyStaticText();
+      await this.refresh();
+      this.setupHooks();
+    }
+
+    applyStaticText() {
+      document.title = this.t('PLUGIN.NAME', 'Obsidian Connector');
+      qs('title').textContent = this.t('PLUGIN.NAME', 'Obsidian Connector');
+      qs('lede').textContent = this.t(
+        'UI.LEDE',
+        'Link each Super Productivity project to a Markdown file in your Obsidian vault. Opening the link launches that note in Obsidian.',
+      );
+      qs('vault-heading').textContent = this.t('UI.VAULT', 'Obsidian vault');
+      qs('vault-name-label').textContent = this.t('UI.VAULT_NAME', 'Vault name');
+      qs('vault-name-hint').textContent = this.t(
+        'UI.VAULT_NAME_HINT',
+        'Use the name shown in Obsidian (usually the vault folder name). Leave empty to open the most recently used vault.',
+      );
+      qs('default-folder-label').textContent = this.t(
+        'UI.DEFAULT_FOLDER',
+        'Default folder',
+      );
+      qs('default-folder-hint').textContent = this.t(
+        'UI.DEFAULT_FOLDER_HINT',
+        'Used when suggesting a path for a new link, for example Projects/My project.md.',
+      );
+      qs('save-vault').textContent = this.t('UI.SAVE', 'Save');
+      qs('link-heading').textContent = this.t('UI.NEW_LINK', 'Link a project');
+      qs('project-label').textContent = this.t('UI.PROJECT', 'Project');
+      qs('file-path-label').textContent = this.t(
+        'UI.FILE_PATH',
+        'Note path in the vault',
+      );
+      qs('file-path-hint').textContent = this.t(
+        'UI.FILE_PATH_HINT',
+        'Relative to the vault root. Example: Projects/Website.md',
+      );
+      qs('suggest-path').textContent = this.t('UI.SUGGEST', 'Suggest path');
+      qs('save-binding').textContent = this.t('UI.LINK', 'Link');
+      qs('list-heading').textContent = this.t('UI.LINKED', 'Linked projects');
+      qs('banner-open').textContent = this.t('UI.OPEN', 'Open in Obsidian');
+    }
+
+    bindEvents() {
+      qs('save-vault').addEventListener('click', () => this.saveVault());
+      qs('suggest-path').addEventListener('click', () => this.suggestPath());
+      qs('save-binding').addEventListener('click', () => this.saveBinding());
+      qs('project-select').addEventListener('change', () => this.onProjectChange());
+      qs('banner-open').addEventListener('click', () => this.openCurrent());
+      qs('banner-link').addEventListener('click', () => this.prefillCurrent());
+    }
+
+    setupHooks() {
+      const hooks = PluginAPI.Hooks || {};
+      const refresh = () => this.refresh();
+      [
+        hooks.PERSISTED_DATA_CHANGED,
+        hooks.PROJECT_LIST_UPDATE,
+        hooks.WORK_CONTEXT_CHANGE,
+        hooks.LANGUAGE_CHANGE,
+      ]
+        .filter(Boolean)
+        .forEach((hook) => {
+          try {
+            PluginAPI.registerHook(hook, refresh);
+          } catch {
+            // Older hosts may reject unknown hooks.
+          }
+        });
+    }
+
+    async refresh() {
+      try {
+        const [raw, projects, context] = await Promise.all([
+          PluginAPI.loadSyncedData(),
+          PluginAPI.getAllProjects(),
+          typeof PluginAPI.getActiveWorkContext === 'function'
+            ? PluginAPI.getActiveWorkContext()
+            : Promise.resolve(null),
+        ]);
+        this.state = Core.parseState(raw);
+        this.projects = Core.visibleProjects(projects);
+        this.context = context;
+        this.render();
+      } catch (error) {
+        this.setStatus(
+          this.t('MSG.LOAD_ERROR', 'Could not load plugin data.'),
+          'error',
+        );
+        console.error(error);
+      }
+    }
+
+    projectById(id) {
+      return this.projects.find((project) => project.id === id) || null;
+    }
+
+    render() {
+      qs('vault-name').value = this.state.vaultName;
+      qs('default-folder').value = this.state.defaultFolder;
+      this.renderProjectSelect();
+      this.renderBanner();
+      this.renderBindings();
+    }
+
+    renderProjectSelect() {
+      const select = qs('project-select');
+      const previous = select.value;
+      const linkedIds = new Set(this.state.bindings.map((item) => item.projectId));
+      const options = this.projects
+        .slice()
+        .sort((a, b) => a.title.localeCompare(b.title))
+        .map((project) => {
+          const linked = linkedIds.has(project.id)
+            ? ` ${this.t('UI.ALREADY_LINKED', '(linked)')}`
+            : '';
+          return `<option value="${escapeHtml(project.id)}">${escapeHtml(
+            project.title + linked,
+          )}</option>`;
+        });
+      select.innerHTML =
+        `<option value="">${escapeHtml(
+          this.t('UI.CHOOSE_PROJECT', 'Choose a project…'),
+        )}</option>` + options.join('');
+
+      if (previous && this.projectById(previous)) {
+        select.value = previous;
+      } else if (this.context && this.context.type === 'PROJECT') {
+        select.value = this.context.id;
+      }
+      this.onProjectChange();
+    }
+
+    renderBanner() {
+      const banner = qs('current-banner');
+      const ctx = this.context;
+      if (!ctx || ctx.type !== 'PROJECT') {
+        banner.classList.add('hidden');
+        return;
+      }
+      banner.classList.remove('hidden');
+      const binding = Core.getBinding(this.state, ctx.id);
+      qs('banner-title').textContent = ctx.title;
+      const openBtn = qs('banner-open');
+      const linkBtn = qs('banner-link');
+      if (binding) {
+        qs('banner-detail').textContent = binding.filePath;
+        openBtn.classList.remove('hidden');
+        linkBtn.textContent = this.t('UI.EDIT_LINK', 'Edit link');
+      } else {
+        qs('banner-detail').textContent = this.t(
+          'UI.CURRENT_UNLINKED',
+          'This project is not linked yet.',
+        );
+        openBtn.classList.add('hidden');
+        linkBtn.textContent = this.t('UI.LINK_THIS', 'Link this project');
+      }
+    }
+
+    renderBindings() {
+      const root = qs('bindings');
+      if (!this.state.bindings.length) {
+        root.innerHTML = `<p class="empty text-muted">${escapeHtml(
+          this.t(
+            'UI.EMPTY',
+            'No projects linked yet. Pick a project and a vault file path, then click Link.',
+          ),
+        )}</p>`;
+        return;
+      }
+
+      root.innerHTML = this.state.bindings
+        .map((binding) => {
+          const project = this.projectById(binding.projectId);
+          const title = project
+            ? project.title
+            : this.t('UI.MISSING_PROJECT', 'Missing project ({{id}})', {
+                id: binding.projectId,
+              });
+          const missingClass = project ? '' : ' text-muted';
+          return `
+            <article class="card binding" data-project-id="${escapeHtml(
+              binding.projectId,
+            )}">
+              <div class="binding-title${missingClass}">
+                <span class="dot"></span>
+                <span>${escapeHtml(title)}</span>
+              </div>
+              <div class="path text-muted">${escapeHtml(binding.filePath)}</div>
+              <div class="actions">
+                <button type="button" data-action="open">${escapeHtml(
+                  this.t('UI.OPEN', 'Open in Obsidian'),
+                )}</button>
+                <button type="button" data-action="create">${escapeHtml(
+                  this.t('UI.CREATE', 'Create note'),
+                )}</button>
+                <button type="button" data-action="copy-uri">${escapeHtml(
+                  this.t('UI.COPY_URI', 'Copy URI'),
+                )}</button>
+                <button type="button" data-action="copy-wiki">${escapeHtml(
+                  this.t('UI.COPY_WIKI', 'Copy [[wiki]]'),
+                )}</button>
+                <button type="button" class="danger" data-action="unlink">${escapeHtml(
+                  this.t('UI.UNLINK', 'Unlink'),
+                )}</button>
+              </div>
+            </article>
+          `;
+        })
+        .join('');
+
+      root.querySelectorAll('[data-action]').forEach((button) => {
+        button.addEventListener('click', (event) => {
+          const article = event.currentTarget.closest('[data-project-id]');
+          const projectId = article && article.getAttribute('data-project-id');
+          this.handleBindingAction(event.currentTarget.getAttribute('data-action'), projectId);
+        });
+      });
+    }
+
+    onProjectChange() {
+      const projectId = qs('project-select').value;
+      const binding = Core.getBinding(this.state, projectId);
+      if (binding) {
+        qs('file-path').value = binding.filePath;
+      }
+    }
+
+    suggestPath() {
+      const project = this.projectById(qs('project-select').value);
+      if (!project) {
+        this.setStatus(
+          this.t('MSG.CHOOSE_PROJECT_FIRST', 'Choose a project first.'),
+          'error',
+        );
+        return;
+      }
+      qs('file-path').value = Core.suggestFilePath(
+        project.title,
+        qs('default-folder').value || this.state.defaultFolder,
+      );
+    }
+
+    prefillCurrent() {
+      if (!this.context || this.context.type !== 'PROJECT') {
+        return;
+      }
+      qs('project-select').value = this.context.id;
+      this.onProjectChange();
+      if (!qs('file-path').value) {
+        this.suggestPath();
+      }
+      qs('file-path').focus();
+    }
+
+    async persist(nextState) {
+      this.state = nextState;
+      await PluginAPI.persistDataSynced(Core.serializeState(nextState));
+      this.render();
+    }
+
+    async saveVault() {
+      const next = Core.updateVaultSettings(this.state, {
+        vaultName: qs('vault-name').value,
+        defaultFolder: qs('default-folder').value,
+      });
+      await this.persist(next);
+      this.setStatus(this.t('MSG.VAULT_SAVED', 'Vault settings saved.'), 'success');
+    }
+
+    async saveBinding() {
+      const projectId = qs('project-select').value;
+      const filePath = qs('file-path').value;
+      const result = Core.upsertBinding(this.state, projectId, filePath);
+      if (!result.ok) {
+        this.setStatus(
+          this.t('MSG.INVALID_PATH', result.message),
+          'error',
+        );
+        return;
+      }
+      await this.persist(result.state);
+      this.setStatus(this.t('MSG.LINKED', 'Project linked to Obsidian file.'), 'success');
+    }
+
+    async handleBindingAction(action, projectId) {
+      const binding = Core.getBinding(this.state, projectId);
+      if (!binding && action !== 'unlink') {
+        return;
+      }
+
+      if (action === 'unlink') {
+        const confirmed = await this.confirmUnlink(projectId);
+        if (!confirmed) {
+          return;
+        }
+        await this.persist(Core.removeBinding(this.state, projectId));
+        this.setStatus(this.t('MSG.UNLINKED', 'Project unlinked.'), 'success');
+        return;
+      }
+
+      if (action === 'open') {
+        await this.openUri(Core.buildOpenUri(this.state, binding), binding.filePath);
+        return;
+      }
+
+      if (action === 'create') {
+        const locale =
+          typeof PluginAPI.getCurrentLanguage === 'function'
+            ? PluginAPI.getCurrentLanguage()
+            : '';
+        await this.openUri(
+          Core.buildNewUri(this.state, binding, this.projectById(projectId), locale),
+          binding.filePath,
+        );
+        return;
+      }
+
+      if (action === 'copy-uri') {
+        const uri = Core.buildOpenUri(this.state, binding);
+        const copied = await Core.copyText(uri);
+        this.setStatus(
+          copied
+            ? this.t('MSG.COPIED', 'Copied to clipboard.')
+            : uri,
+          copied ? 'success' : 'error',
+        );
+        return;
+      }
+
+      if (action === 'copy-wiki') {
+        const copied = await Core.copyText(Core.wikiLink(binding.filePath));
+        this.setStatus(
+          copied
+            ? this.t('MSG.COPIED', 'Copied to clipboard.')
+            : Core.wikiLink(binding.filePath),
+          copied ? 'success' : 'error',
+        );
+      }
+    }
+
+    async confirmUnlink(projectId) {
+      const project = this.projectById(projectId);
+      const title = project ? project.title : projectId;
+      if (typeof PluginAPI.openDialog === 'function') {
+        const result = await PluginAPI.openDialog({
+          title: this.t('UI.UNLINK', 'Unlink'),
+          htmlContent: `<p>${escapeHtml(
+            this.t(
+              'MSG.CONFIRM_UNLINK',
+              'Remove the Obsidian link for "{{title}}"? The note in the vault is not deleted.',
+              { title },
+            ),
+          )}</p>`,
+          buttons: [
+            { label: this.t('UI.CANCEL', 'Cancel') },
+            { label: this.t('UI.UNLINK', 'Unlink'), color: 'warn', raised: true },
+          ],
+        });
+        return result === this.t('UI.UNLINK', 'Unlink');
+      }
+      return true;
+    }
+
+    async openCurrent() {
+      if (!this.context || this.context.type !== 'PROJECT') {
+        return;
+      }
+      const binding = Core.getBinding(this.state, this.context.id);
+      if (!binding) {
+        this.prefillCurrent();
+        return;
+      }
+      await this.openUri(Core.buildOpenUri(this.state, binding), binding.filePath);
+    }
+
+    async openUri(uri, filePath) {
+      if (!uri) {
+        this.setStatus(this.t('MSG.OPEN_FAILED', 'Could not build the Obsidian URI.'), 'error');
+        return;
+      }
+      const result = Core.openExternalUri(uri);
+      if (result.ok) {
+        this.setStatus(
+          this.t('MSG.OPENING_NOTE', 'Opening {{file}} in Obsidian…', {
+            file: filePath || '',
+          }),
+          'success',
+        );
+        return;
+      }
+      const copied = await Core.copyText(uri);
+      this.setStatus(
+        copied
+          ? this.t(
+              'MSG.URI_COPIED',
+              'Could not open Obsidian automatically. The URI was copied to the clipboard.',
+            )
+          : uri,
+        copied ? 'success' : 'error',
+      );
+    }
+
+    setStatus(message, tone) {
+      const el = qs('status');
+      el.textContent = message || '';
+      el.dataset.tone = tone || '';
+      if (message && PluginAPI.showSnack) {
+        PluginAPI.showSnack({
+          msg: message,
+          type: tone === 'error' ? 'ERROR' : tone === 'success' ? 'SUCCESS' : 'INFO',
+        });
+      }
+    }
+  }
+
+  waitForPluginApi();
+})();
+
+    </script>
+  </body>
+</html>

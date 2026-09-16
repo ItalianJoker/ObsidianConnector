@@ -1,0 +1,13 @@
+{
+  "name": "obsidian-connector",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Super Productivity plugin that links projects to files in an Obsidian vault.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/build.js",
+    "zip": "npm run build && node scripts/zip.js",
+    "harness": "npm run build && node scripts/serve-harness.js"
+  }
+}

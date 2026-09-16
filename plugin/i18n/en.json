@@ -1,0 +1,57 @@
+{
+  "PLUGIN": {
+    "NAME": "Obsidian Connector",
+    "DESCRIPTION": "Link Super Productivity projects to Markdown files in an Obsidian vault."
+  },
+  "SHORTCUT": {
+    "OPEN_LINKED_NOTE": "Open linked Obsidian note",
+    "OPEN_PANEL": "Open Obsidian Connector"
+  },
+  "HEADER": {
+    "OPEN_NOTE": "Obsidian"
+  },
+  "UI": {
+    "LEDE": "Link each Super Productivity project to a Markdown file in your Obsidian vault. Opening the link launches that note in Obsidian.",
+    "VAULT": "Obsidian vault",
+    "VAULT_NAME": "Vault name",
+    "VAULT_NAME_HINT": "Use the name shown in Obsidian (usually the vault folder name). Leave empty to open the most recently used vault.",
+    "DEFAULT_FOLDER": "Default folder",
+    "DEFAULT_FOLDER_HINT": "Used when suggesting a path for a new link, for example Projects/My project.md.",
+    "SAVE": "Save",
+    "NEW_LINK": "Link a project",
+    "PROJECT": "Project",
+    "FILE_PATH": "Note path in the vault",
+    "FILE_PATH_HINT": "Relative to the vault root. Example: Projects/Website.md",
+    "SUGGEST": "Suggest path",
+    "LINK": "Link",
+    "LINKED": "Linked projects",
+    "OPEN": "Open in Obsidian",
+    "CREATE": "Create note",
+    "COPY_URI": "Copy URI",
+    "COPY_WIKI": "Copy [[wiki]]",
+    "UNLINK": "Unlink",
+    "CANCEL": "Cancel",
+    "CHOOSE_PROJECT": "Choose a project…",
+    "ALREADY_LINKED": "(linked)",
+    "EMPTY": "No projects linked yet. Pick a project and a vault file path, then click Link.",
+    "MISSING_PROJECT": "Missing project ({{id}})",
+    "CURRENT_UNLINKED": "This project is not linked yet.",
+    "EDIT_LINK": "Edit link",
+    "LINK_THIS": "Link this project"
+  },
+  "MSG": {
+    "NO_PROJECT_CONTEXT": "Open a project first, then try again.",
+    "PROJECT_NOT_LINKED": "This project is not linked to an Obsidian file yet.",
+    "URI_COPIED": "Could not open Obsidian automatically. The URI was copied to the clipboard.",
+    "OPEN_FAILED": "Could not open Obsidian.",
+    "OPENING_NOTE": "Opening {{file}} in Obsidian…",
+    "LOAD_ERROR": "Could not load plugin data.",
+    "VAULT_SAVED": "Vault settings saved.",
+    "LINKED": "Project linked to Obsidian file.",
+    "UNLINKED": "Project unlinked.",
+    "COPIED": "Copied to clipboard.",
+    "CHOOSE_PROJECT_FIRST": "Choose a project first.",
+    "INVALID_PATH": "Enter a vault-relative path such as Projects/My note.md (no absolute paths or ..).",
+    "CONFIRM_UNLINK": "Remove the Obsidian link for \"{{title}}\"? The note in the vault is not deleted."
+  }
+}

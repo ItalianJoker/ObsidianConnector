@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Obsidian Connector</title>
+    <style>
+/*__STYLES__*/
+    </style>
+  </head>
+  <body>
+    <div class="wrap page-fade">
+      <header class="header">
+        <h1 id="title">Obsidian Connector</h1>
+        <p id="lede" class="lede text-muted"></p>
+      </header>
+
+      <p id="status" class="status" aria-live="polite"></p>
+
+      <section id="current-banner" class="card banner hidden">
+        <div>
+          <strong id="banner-title"></strong>
+          <span id="banner-detail" class="text-muted"></span>
+        </div>
+        <div class="actions">
+          <button id="banner-open" type="button" class="primary hidden">Open</button>
+          <button id="banner-link" type="button">Link</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 id="vault-heading">Obsidian vault</h2>
+        <div class="field">
+          <label id="vault-name-label" for="vault-name">Vault name</label>
+          <input
+            id="vault-name"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="My Vault"
+          />
+        </div>
+        <p id="vault-name-hint" class="hint text-muted"></p>
+        <div class="field">
+          <label id="default-folder-label" for="default-folder">Default folder</label>
+          <input
+            id="default-folder"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Projects"
+          />
+        </div>
+        <p id="default-folder-hint" class="hint text-muted"></p>
+        <div class="row">
+          <button id="save-vault" type="button" class="primary">Save</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 id="link-heading">Link a project</h2>
+        <div class="field">
+          <label id="project-label" for="project-select">Project</label>
+          <select id="project-select"></select>
+        </div>
+        <div class="field">
+          <label id="file-path-label" for="file-path">Note path</label>
+          <input
+            id="file-path"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Projects/My project.md"
+          />
+        </div>
+        <p id="file-path-hint" class="hint text-muted"></p>
+        <div class="row">
+          <button id="suggest-path" type="button">Suggest path</button>
+          <button id="save-binding" type="button" class="primary">Link</button>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="list-heading">Linked projects</h2>
+        <div id="bindings" class="bindings"></div>
+      </section>
+    </div>
+
+    <script>
+/*__CORE__*/
+/*__UI__*/
+    </script>
+  </body>
+</html>

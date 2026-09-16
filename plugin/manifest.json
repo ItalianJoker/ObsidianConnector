@@ -1,0 +1,31 @@
+{
+  "id": "obsidian-connector",
+  "name": "Obsidian Connector",
+  "version": "1.0.0",
+  "manifestVersion": 1,
+  "minSupVersion": "14.0.0",
+  "description": "Link Super Productivity projects to Markdown files in an Obsidian vault.",
+  "author": "Luca",
+  "homepage": "https://github.com/ItalianJoker/ObsidianConnector",
+  "icon": "icon.svg",
+  "iFrame": true,
+  "sidePanel": true,
+  "type": "standard",
+  "hooks": [
+    "persistedDataChanged",
+    "projectListUpdate",
+    "workContextChange",
+    "languageChange"
+  ],
+  "permissions": [
+    "getAllProjects",
+    "persistDataSynced",
+    "loadSyncedData",
+    "showSnack",
+    "openDialog",
+    "showIndexHtmlAsView"
+  ],
+  "i18n": {
+    "languages": ["en", "it"]
+  }
+}
