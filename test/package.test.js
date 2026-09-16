@@ -41,5 +41,17 @@ describe('plugin package', () => {
     assert.ok(Array.isArray(manifest.permissions));
     assert.ok(manifest.permissions.includes('getAllProjects'));
     assert.ok(manifest.permissions.includes('persistDataSynced'));
+    assert.ok(manifest.permissions.includes('nodeExecution'));
+  });
+
+  it('ships an existing-page picker with mobile fallback and no create flow', () => {
+    const html = fs.readFileSync(path.join(root, 'src/index.template.html'), 'utf8');
+    assert.match(html, /id="page-list"/);
+    assert.match(html, /id="manual-page"/);
+    assert.match(html, /id="load-pages"/);
+    assert.match(html, /never creates a new page/i);
+    assert.doesNotMatch(html, /id="suggest-path"/);
+    assert.doesNotMatch(html, /id="create-note"/);
+    assert.doesNotMatch(html, /obsidian:\/\/new/);
   });
 });

@@ -22,7 +22,7 @@ const types = {
 const mockSnippet = fs.readFileSync(path.join(harnessDir, 'mock-api.js'), 'utf8');
 
 function injectMock(html) {
-  return html.replace('<body>', `<body>\n<script>\n${mockSnippet}\n</script>`);
+  return html.replace(/<body([^>]*)>/i, `<body$1>\n<script>\n${mockSnippet}\n</script>`);
 }
 
 function send(res, status, body, type) {

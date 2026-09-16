@@ -8,7 +8,16 @@
   const projects = [
     { id: 'p-website', title: 'Website', theme: { primary: '#5b7fff' }, taskIds: [], backlogTaskIds: [] },
     { id: 'p-thesis', title: 'Thesis', theme: {}, taskIds: [], backlogTaskIds: [] },
+    { id: 'p-elmec', title: 'Elmec', theme: {}, taskIds: [], backlogTaskIds: [] },
     { id: 'p-inbox', title: 'Inbox', theme: {}, taskIds: [], backlogTaskIds: [] },
+  ];
+
+  const vaultPages = [
+    { path: 'Personal/Journal.md', name: 'Journal' },
+    { path: 'Projects/Thesis.md', name: 'Thesis' },
+    { path: 'Projects/Website.md', name: 'Website' },
+    { path: 'Work/Elmec.md', name: 'Elmec' },
+    { path: 'Work/Notes.md', name: 'Notes' },
   ];
 
   let context = {
@@ -18,10 +27,14 @@
     taskIds: [],
   };
 
+  const params = new URLSearchParams(window.location.search);
+  const platform = params.get('platform') || 'desktop';
+
   window.__obsidianConnectorHarness = {
     opened,
     snacks,
     projects,
+    vaultPages,
     get context() {
       return context;
     },
@@ -43,7 +56,7 @@
     cfg: {
       theme: 'light',
       appVersion: '18.0.0',
-      platform: 'web',
+      platform,
       isDev: true,
       lang: { code: 'en' },
     },
@@ -82,6 +95,12 @@
     showIndexHtmlAsView() {},
   };
 
+  if (platform === 'desktop') {
+    window.PluginAPI.executeNodeScript = async function () {
+      return { success: true, result: vaultPages.slice() };
+    };
+  }
+
   function installBar() {
     if (!document.body || document.getElementById('harness-bar')) {
       return;
@@ -93,7 +112,9 @@
     bar.style.cssText =
       'position:sticky;top:0;z-index:9;padding:8px 12px;background:#1e1e1e;color:#fff;font:12px/1.4 sans-serif;';
     bar.innerHTML =
-      '<strong>Harness</strong> · Opened URIs: <code id="harness-opened">none</code>';
+      '<strong>Harness</strong> · platform=' +
+      platform +
+      ' · Opened URIs: <code id="harness-opened">none</code>';
     document.body.prepend(bar);
   }
 

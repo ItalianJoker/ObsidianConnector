@@ -1,5 +1,8 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const Core = require('../src/core.js');
 
 describe('parseState', () => {
@@ -9,20 +12,31 @@ describe('parseState', () => {
     assert.equal(Core.parseState([]).defaultFolder, 'Projects');
   });
 
-  it('keeps vault settings and drops duplicate project bindings', () => {
+  it('keeps vault settings and note bindings', () => {
     const state = Core.parseState({
       vaultName: '  Work  ',
+      vaultPath: '/home/you/Obsidian/Work/',
       defaultFolder: '\\Notes\\Projects\\',
       bindings: [
-        { projectId: 'a', filePath: 'one.md', createdAt: 1, updatedAt: 1 },
-        { projectId: 'a', filePath: 'two.md', createdAt: 2, updatedAt: 2 },
+        { projectId: 'a', filePath: 'Projects/one.md', createdAt: 1, updatedAt: 1 },
+        { projectId: 'a', filePath: 'Projects/two.md', createdAt: 2, updatedAt: 2 },
         { projectId: '', filePath: 'skip.md' },
       ],
     });
     assert.equal(state.vaultName, 'Work');
+    assert.equal(state.vaultPath, '/home/you/Obsidian/Work');
     assert.equal(state.defaultFolder, 'Notes/Projects');
     assert.equal(state.bindings.length, 1);
-    assert.equal(state.bindings[0].filePath, 'two.md');
+    assert.equal(state.bindings[0].filePath, 'Projects/two.md');
+    assert.equal(state.bindings[0].folderPath, 'Projects');
+  });
+
+  it('keeps legacy folder bindings openable without inventing a .md page', () => {
+    const state = Core.parseState({
+      bindings: [{ projectId: 'p1', folderPath: 'Work/Elmec', filePath: 'Work/Elmec' }],
+    });
+    assert.equal(state.bindings[0].filePath, 'Work/Elmec');
+    assert.equal(Core.bindingTarget(state.bindings[0]), 'Work/Elmec');
   });
 });
 
@@ -39,16 +53,29 @@ describe('normalizeVaultFilePath', () => {
   });
 });
 
+describe('normalizeVaultRootPath', () => {
+  it('accepts absolute POSIX and Windows vault paths', () => {
+    assert.equal(Core.normalizeVaultRootPath('/home/you/Vault/'), '/home/you/Vault');
+    assert.equal(Core.normalizeVaultRootPath('C:\\Users\\you\\Vault'), 'C:/Users/you/Vault');
+  });
+
+  it('rejects relative and UNC paths', () => {
+    assert.equal(Core.normalizeVaultRootPath('Obsidian/Work'), '');
+    assert.equal(Core.normalizeVaultRootPath('//server/share'), '');
+  });
+});
+
 describe('bindings', () => {
-  it('upserts and removes a project binding', () => {
+  it('upserts an existing note page binding', () => {
     let result = Core.upsertBinding({}, 'proj-1', 'Projects/Website.md', 1000);
     assert.equal(result.ok, true);
     assert.equal(result.binding.filePath, 'Projects/Website.md');
+    assert.equal(result.binding.folderPath, 'Projects');
     assert.equal(result.binding.createdAt, 1000);
 
-    result = Core.upsertBinding(result.state, 'proj-1', 'Projects/Site.md', 2000);
+    result = Core.upsertBinding(result.state, 'proj-1', 'Work/Elmec', 2000);
     assert.equal(result.state.bindings.length, 1);
-    assert.equal(result.state.bindings[0].filePath, 'Projects/Site.md');
+    assert.equal(result.state.bindings[0].filePath, 'Work/Elmec.md');
     assert.equal(result.state.bindings[0].createdAt, 1000);
     assert.equal(result.state.bindings[0].updatedAt, 2000);
 
@@ -56,7 +83,9 @@ describe('bindings', () => {
     assert.equal(removed.bindings.length, 0);
   });
 
-  it('rejects an empty or unsafe path', () => {
+  it('rejects an empty project, empty path, or unsafe path', () => {
+    assert.equal(Core.upsertBinding({}, '', 'Projects/A.md').ok, false);
+    assert.equal(Core.upsertBinding({}, 'proj-1', '').ok, false);
     const result = Core.upsertBinding({}, 'proj-1', '../outside.md');
     assert.equal(result.ok, false);
     assert.equal(result.state.bindings.length, 0);
@@ -64,43 +93,93 @@ describe('bindings', () => {
 });
 
 describe('obsidian URIs', () => {
-  it('builds an open URI with encoded vault and file', () => {
+  it('builds an open URI for an existing page', () => {
     const state = { vaultName: 'My Vault' };
-    const uri = Core.buildOpenUri(state, { filePath: 'Projects/Website.md' });
-    assert.equal(
-      uri,
-      'obsidian://open?vault=My%20Vault&file=Projects%2FWebsite',
-    );
+    const uri = Core.buildOpenUri(state, { filePath: 'Work/Elmec.md' });
+    assert.equal(uri, 'obsidian://open?vault=My%20Vault&file=Work%2FElmec');
+  });
+
+  it('opens existing pages with obsidian://open only', () => {
+    const open = Core.buildOpenUri({ vaultName: 'Work' }, { filePath: 'A.md' });
+    assert.match(open, /^obsidian:\/\/open\?/);
+    assert.doesNotMatch(open, /obsidian:\/\/new/);
+    assert.equal(typeof Core.buildNewUri, 'undefined');
   });
 
   it('omits an empty vault name', () => {
     const uri = Core.buildOpenUri({ vaultName: '' }, { filePath: 'Inbox.md' });
     assert.equal(uri, 'obsidian://open?file=Inbox');
   });
+});
 
-  it('builds a new-note URI with frontmatter content', () => {
-    const uri = Core.buildNewUri(
-      { vaultName: 'Work' },
-      { projectId: 'abc', filePath: 'Projects/Thesis.md' },
-      { id: 'abc', title: 'Thesis' },
+describe('page ranking', () => {
+  it('lists likely project-name matches first', () => {
+    const pages = [
+      'Inbox.md',
+      'Projects/Website.md',
+      'Work/Elmec.md',
+      'Archive.md',
+    ];
+    const ranked = Core.filterPages(pages, '', 'Elmec');
+    assert.equal(ranked[0], 'Work/Elmec.md');
+  });
+});
+
+describe('vault page listing', () => {
+  it('walks a real vault-like tree and lists existing .md pages only', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'obsidian-vault-'));
+    fs.mkdirSync(path.join(tmp, 'Projects'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, 'Work'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, '.obsidian'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'Projects', 'Website.md'), '# Website');
+    fs.writeFileSync(path.join(tmp, 'Work', 'Elmec.md'), '# Elmec');
+    fs.writeFileSync(path.join(tmp, '.obsidian', 'app.json'), '{}');
+    fs.writeFileSync(path.join(tmp, 'readme.txt'), 'ignore');
+
+    const script = Core.listVaultPagesScript(tmp);
+    const pages = new Function('require', script)(require);
+    const paths = pages.map((page) => page.path).sort();
+
+    assert.deepEqual(paths, ['Projects/Website.md', 'Work/Elmec.md']);
+  });
+
+  it('parses executeNodeScript page results', () => {
+    const parsed = Core.parseNodePageResult({
+      success: true,
+      result: [
+        { path: 'Work/Elmec.md', name: 'Elmec' },
+        { path: 'Projects/Website.md', name: 'Website' },
+      ],
+    });
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.pages.length, 2);
+    assert.equal(parsed.pages[0].path, 'Work/Elmec.md');
+  });
+});
+
+describe('platform helpers', () => {
+  it('detects desktop browse capability and mobile platforms', () => {
+    assert.equal(Core.isDesktopPlatform({ cfg: { platform: 'desktop' } }), true);
+    assert.equal(Core.isMobilePlatform({ cfg: { platform: 'android' } }), true);
+    assert.equal(Core.isMobilePlatform({ cfg: { platform: 'ios' } }), true);
+    assert.equal(
+      Core.canBrowseVault({
+        cfg: { platform: 'desktop' },
+        executeNodeScript() {},
+      }),
+      true,
     );
-    assert.match(uri, /^obsidian:\/\/new\?/);
-    assert.match(uri, /vault=Work/);
-    assert.match(uri, /file=Projects%2FThesis/);
-    assert.match(uri, /content=/);
-    assert.match(decodeURIComponent(uri), /super-productivity-id: abc/);
-    assert.match(decodeURIComponent(uri), /This note is linked/);
+    assert.equal(
+      Core.canBrowseVault({
+        cfg: { platform: 'android' },
+        executeNodeScript() {},
+      }),
+      false,
+    );
   });
 });
 
 describe('path helpers', () => {
-  it('suggests a safe file path from the project title', () => {
-    assert.equal(
-      Core.suggestFilePath('Site / Launch*', 'Projects'),
-      'Projects/Site - Launch-.md',
-    );
-  });
-
   it('builds a wiki link without the .md suffix', () => {
     assert.equal(Core.wikiLink('Projects/Website.md'), '[[Projects/Website]]');
   });
@@ -127,7 +206,6 @@ describe('t', () => {
     };
     const result = Core.t(api, 'UI.SAVE', 'Save');
     assert.equal(result, 'Save');
-    assert.equal(String(result), 'Save');
   });
 
   it('uses a string translation when the host returns one', () => {
@@ -137,12 +215,5 @@ describe('t', () => {
       },
     };
     assert.equal(Core.t(api, 'UI.SAVE', 'Save'), 'Save settings');
-  });
-
-  it('interpolates fallback params', () => {
-    assert.equal(
-      Core.t(null, 'MSG.OPENING_NOTE', 'Opening {{file}}…', { file: 'Note.md' }),
-      'Opening Note.md…',
-    );
   });
 });

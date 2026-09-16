@@ -1,6 +1,9 @@
 /**
- * Shared, DOM-light helpers for the Obsidian Connector plugin.
- * Loaded in Node tests (CommonJS) and concatenated into plugin.js / index.html.
+ * Shared helpers for the Obsidian Connector plugin.
+ * Used by Node tests (CommonJS) and concatenated into plugin.js / index.html.
+ *
+ * Linking model: existing Super Productivity project → existing Obsidian page.
+ * Opening uses obsidian://open only. This module does not create pages or projects.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -11,17 +14,39 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const STORAGE_VERSION = 1;
+  const STORAGE_VERSION = 3;
+  /** Kept in persisted state for older installs; not used by the page-link UI. */
   const DEFAULT_FOLDER = 'Projects';
-  const ILLEGAL_NAME_CHARS = /[\\/:*?"<>|]/g;
+  const SKIP_VAULT_DIRS = ['.obsidian', '.trash', '.git', 'node_modules'];
 
   function createEmptyState() {
     return {
       version: STORAGE_VERSION,
       vaultName: '',
+      vaultPath: '',
       defaultFolder: DEFAULT_FOLDER,
       bindings: [],
     };
+  }
+
+  function getPlatform(api) {
+    const platform =
+      api && api.cfg && typeof api.cfg.platform === 'string' ? api.cfg.platform : '';
+    return platform || 'web';
+  }
+
+  function isDesktopPlatform(api) {
+    return getPlatform(api) === 'desktop';
+  }
+
+  function isMobilePlatform(api) {
+    const platform = getPlatform(api);
+    return platform === 'android' || platform === 'ios';
+  }
+
+  /** True when the host can list vault files via executeNodeScript (desktop only). */
+  function canBrowseVault(api) {
+    return isDesktopPlatform(api) && typeof (api && api.executeNodeScript) === 'function';
   }
 
   function isPlainObject(value) {
@@ -47,15 +72,14 @@
     }
 
     const vaultName = typeof parsed.vaultName === 'string' ? parsed.vaultName.trim() : '';
+    const vaultPath = normalizeVaultRootPath(parsed.vaultPath);
     const defaultFolder =
       typeof parsed.defaultFolder === 'string' && parsed.defaultFolder.trim()
         ? normalizeVaultFilePath(parsed.defaultFolder)
         : DEFAULT_FOLDER;
 
     const bindings = Array.isArray(parsed.bindings)
-      ? parsed.bindings
-          .map(normalizeBinding)
-          .filter(Boolean)
+      ? parsed.bindings.map(normalizeBinding).filter(Boolean)
       : [];
 
     const byProject = new Map();
@@ -66,6 +90,7 @@
     return {
       version: STORAGE_VERSION,
       vaultName,
+      vaultPath,
       defaultFolder,
       bindings: Array.from(byProject.values()),
     };
@@ -79,8 +104,8 @@
     if (!projectId) {
       return null;
     }
-    const filePath = normalizeVaultFilePath(binding.filePath);
-    if (!filePath) {
+    const filePath = notePathFromBinding(binding);
+    if (filePath == null) {
       return null;
     }
     const createdAt =
@@ -91,7 +116,95 @@
       typeof binding.updatedAt === 'number' && Number.isFinite(binding.updatedAt)
         ? binding.updatedAt
         : createdAt;
-    return { projectId, filePath, createdAt, updatedAt };
+    return {
+      projectId,
+      filePath,
+      folderPath: isNoteTarget(filePath) ? parentFolderOf(filePath) : filePath,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  function parentFolderOf(filePath) {
+    const normalized = normalizeVaultFilePath(filePath);
+    if (!normalized) {
+      return '';
+    }
+    const parts = normalized.split('/');
+    if (parts.length <= 1) {
+      return '';
+    }
+    parts.pop();
+    return parts.join('/');
+  }
+
+  /**
+   * Vault-relative target for a binding.
+   * Prefers an existing note path; keeps legacy folder-only bindings openable.
+   */
+  function notePathFromBinding(binding) {
+    if (!isPlainObject(binding)) {
+      return null;
+    }
+    const rawFile = typeof binding.filePath === 'string' ? binding.filePath : null;
+    const rawFolder = typeof binding.folderPath === 'string' ? binding.folderPath : null;
+
+    if (rawFile != null && rawFile.trim()) {
+      const filePath = normalizeVaultFilePath(rawFile);
+      if (!filePath) {
+        return null;
+      }
+      if (/\.md$/i.test(filePath)) {
+        return withMarkdownExtension(filePath);
+      }
+      const folder = rawFolder != null ? normalizeVaultFilePath(rawFolder) : null;
+      // v1.1 stored folder bindings with filePath === folderPath (no .md).
+      if (folder != null && folder === filePath) {
+        return filePath;
+      }
+      return withMarkdownExtension(filePath);
+    }
+
+    if (rawFolder != null) {
+      const folder = normalizeVaultFilePath(rawFolder);
+      if (rawFolder.trim() && !folder) {
+        return null;
+      }
+      return folder;
+    }
+    return null;
+  }
+
+  function isNoteTarget(path) {
+    return /\.md$/i.test(String(path || ''));
+  }
+
+  function bindingTarget(binding) {
+    if (!binding) {
+      return '';
+    }
+    const target = notePathFromBinding(binding);
+    return target == null ? '' : target;
+  }
+
+  /** Absolute path to the vault folder on disk (desktop). Empty if unset. */
+  function normalizeVaultRootPath(filePath) {
+    if (typeof filePath !== 'string') {
+      return '';
+    }
+    let path = filePath.trim().replace(/\\/g, '/');
+    if (!path) {
+      return '';
+    }
+    if (path.startsWith('//')) {
+      return '';
+    }
+    const isWindows = /^[a-zA-Z]:\//.test(path);
+    const isPosix = path.startsWith('/');
+    if (!isWindows && !isPosix) {
+      return '';
+    }
+    return path.replace(/\/+$/, '');
   }
 
   function serializeState(state) {
@@ -100,7 +213,7 @@
 
   /**
    * Vault-relative path: forward slashes, no leading slash, no `..` segments.
-   * Keeps a trailing `.md` if the user provided one.
+   * Keeps a trailing `.md` when present.
    */
   function normalizeVaultFilePath(filePath) {
     if (typeof filePath !== 'string') {
@@ -132,11 +245,19 @@
     if (!normalized) {
       return {
         ok: false,
-        message:
-          'Enter a vault-relative path such as Projects/My note.md (no absolute paths or ..).',
+        message: 'Choose an existing page inside the vault (no absolute paths or ..).',
       };
     }
     return { ok: true, path: normalized };
+  }
+
+  /** Normalize and require a vault-relative note path (adds .md when missing). */
+  function validateExistingNotePath(filePath) {
+    const validated = validateFilePath(filePath);
+    if (!validated.ok) {
+      return validated;
+    }
+    return { ok: true, path: withMarkdownExtension(validated.path) };
   }
 
   function stripMarkdownExtension(filePath) {
@@ -149,23 +270,6 @@
       return '';
     }
     return /\.md$/i.test(normalized) ? normalized : `${normalized}.md`;
-  }
-
-  function sanitizeNoteTitle(title) {
-    const cleaned = String(title || '')
-      .trim()
-      .replace(ILLEGAL_NAME_CHARS, '-')
-      .replace(/\s+/g, ' ')
-      .replace(/-+/g, '-')
-      .replace(/^\.+$/, '')
-      .replace(/[. ]+$/g, '');
-    return cleaned || 'Untitled';
-  }
-
-  function suggestFilePath(projectTitle, defaultFolder) {
-    const folder = normalizeVaultFilePath(defaultFolder || DEFAULT_FOLDER);
-    const name = `${sanitizeNoteTitle(projectTitle)}.md`;
-    return folder ? `${folder}/${name}` : name;
   }
 
   function wikiLink(filePath) {
@@ -187,47 +291,16 @@
     return parts.join('&');
   }
 
+  /** Build obsidian://open for an existing binding. Never uses obsidian://new. */
   function buildOpenUri(state, binding) {
-    const filePath = normalizeVaultFilePath(binding && binding.filePath);
-    if (!filePath) {
+    if (!binding) {
       return null;
     }
+    const target = bindingTarget(binding);
     const vaultName = (state && state.vaultName) || '';
     return `obsidian://open?${queryString({
       vault: vaultName,
-      file: stripMarkdownExtension(filePath),
-    })}`;
-  }
-
-  function noteTemplate({ projectId, projectTitle }) {
-    const title = projectTitle || 'Untitled project';
-    return [
-      '---',
-      `super-productivity-id: ${projectId || ''}`,
-      `super-productivity-project: ${title}`,
-      '---',
-      '',
-      `# ${title}`,
-      '',
-      'This note is linked to a Super Productivity project.',
-      '',
-    ].join('\n');
-  }
-
-  function buildNewUri(state, binding, project) {
-    const filePath = normalizeVaultFilePath(binding && binding.filePath);
-    if (!filePath) {
-      return null;
-    }
-    const vaultName = (state && state.vaultName) || '';
-    const content = noteTemplate({
-      projectId: binding.projectId || (project && project.id),
-      projectTitle: (project && project.title) || stripMarkdownExtension(filePath),
-    });
-    return `obsidian://new?${queryString({
-      vault: vaultName,
-      file: stripMarkdownExtension(filePath),
-      content,
+      file: stripMarkdownExtension(target),
     })}`;
   }
 
@@ -240,15 +313,24 @@
 
   function upsertBinding(state, projectId, filePath, now) {
     const next = parseState(state);
-    const validated = validateFilePath(filePath);
-    if (!projectId || !validated.ok) {
-      return { ok: false, state: next, message: validated.message || 'Missing project.' };
+    if (!projectId) {
+      return {
+        ok: false,
+        state: next,
+        message: 'Choose an existing Super Productivity project.',
+      };
     }
+    const validated = validateExistingNotePath(filePath);
+    if (!validated.ok) {
+      return { ok: false, state: next, message: validated.message };
+    }
+    const path = validated.path;
     const timestamp = typeof now === 'number' ? now : Date.now();
     const existing = getBinding(next, projectId);
     const binding = {
       projectId,
-      filePath: validated.path,
+      filePath: path,
+      folderPath: parentFolderOf(path),
       createdAt: existing ? existing.createdAt : timestamp,
       updatedAt: timestamp,
     };
@@ -264,10 +346,13 @@
     return next;
   }
 
-  function updateVaultSettings(state, { vaultName, defaultFolder }) {
+  function updateVaultSettings(state, { vaultName, vaultPath, defaultFolder }) {
     const next = parseState(state);
     if (typeof vaultName === 'string') {
       next.vaultName = vaultName.trim();
+    }
+    if (typeof vaultPath === 'string') {
+      next.vaultPath = normalizeVaultRootPath(vaultPath);
     }
     if (typeof defaultFolder === 'string') {
       const folder = normalizeVaultFilePath(defaultFolder);
@@ -276,8 +361,176 @@
     return next;
   }
 
+  function rankPath(pathValue, projectTitle) {
+    if (!projectTitle) {
+      return 0;
+    }
+    const hay = String(pathValue || '').toLowerCase();
+    const title = String(projectTitle).toLowerCase().trim();
+    if (!title) {
+      return 0;
+    }
+    const leaf = hay.split('/').pop() || hay;
+    if (leaf === title || hay === title) {
+      return 5;
+    }
+    if (leaf.includes(title) || hay.endsWith('/' + title)) {
+      return 4;
+    }
+    if (hay.includes(title)) {
+      return 3;
+    }
+    const words = title.split(/[^a-z0-9]+/i).filter((word) => word.length > 2);
+    if (!words.length) {
+      return 0;
+    }
+    const hits = words.filter((word) => hay.includes(word)).length;
+    return hits ? 1 + hits / words.length : 0;
+  }
+
+  function rankPage(pagePath, projectTitle) {
+    return rankPath(stripMarkdownExtension(pagePath), projectTitle);
+  }
+
+  /** Filter/search existing pages and rank likely project-name matches first. */
+  function filterPages(pages, query, projectTitle) {
+    const list = Array.isArray(pages) ? pages.slice() : [];
+    const needle = String(query || '').trim().toLowerCase();
+    const filtered = needle
+      ? list.filter((page) => {
+          const path = typeof page === 'string' ? page : page && page.path;
+          const name = typeof page === 'string' ? page : page && page.name;
+          return (
+            String(path || '')
+              .toLowerCase()
+              .includes(needle) ||
+            String(name || '')
+              .toLowerCase()
+              .includes(needle)
+          );
+        })
+      : list;
+    filtered.sort((a, b) => {
+      const pathA = typeof a === 'string' ? a : a.path || '';
+      const pathB = typeof b === 'string' ? b : b.path || '';
+      const rank = rankPage(pathB, projectTitle) - rankPage(pathA, projectTitle);
+      if (rank !== 0) {
+        return rank;
+      }
+      return pathA.localeCompare(pathB);
+    });
+    return filtered;
+  }
+
+  /**
+   * Node script string for executeNodeScript: list existing .md pages under the vault.
+   * Does not create files.
+   */
+  function listVaultPagesScript(vaultRoot) {
+    const root = normalizeVaultRootPath(vaultRoot);
+    return `
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(${JSON.stringify(root)});
+if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+  throw new Error('Vault folder not found');
+}
+const skip = new Set(${JSON.stringify(SKIP_VAULT_DIRS)});
+const pages = [];
+function walk(dir, rel, depth) {
+  if (depth > 10 || pages.length >= 5000) {
+    return;
+  }
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch (e) {
+    return;
+  }
+  for (const name of names) {
+    if (!name || name.charAt(0) === '.' || skip.has(name)) {
+      continue;
+    }
+    const full = path.join(dir, name);
+    let st;
+    try {
+      st = fs.statSync(full);
+    } catch (e) {
+      continue;
+    }
+    if (st.isDirectory()) {
+      const relative = rel ? rel + '/' + name : name;
+      walk(full, relative, depth + 1);
+      continue;
+    }
+    if (!st.isFile() || !/\\.md$/i.test(name)) {
+      continue;
+    }
+    const relative = rel ? rel + '/' + name : name;
+    pages.push({
+      path: relative.replace(/\\\\/g, '/'),
+      name: name.replace(/\\.md$/i, ''),
+    });
+  }
+}
+walk(root, '', 0);
+return pages;
+`;
+  }
+
+  /** Parse executeNodeScript results into { ok, pages, error }. */
+  function parseNodePageResult(result) {
+    if (!result || result.success === false) {
+      const error =
+        (result && result.error && result.error.message) ||
+        (result && result.error) ||
+        'Could not read the vault folder.';
+      return { ok: false, pages: [], error: String(error) };
+    }
+    const raw = result.result;
+    if (!Array.isArray(raw)) {
+      return {
+        ok: false,
+        pages: [],
+        error: 'Unexpected page list from the desktop app.',
+      };
+    }
+
+    const pages = [];
+    for (const item of raw) {
+      let pathValue = '';
+      let name = '';
+      if (typeof item === 'string') {
+        pathValue = normalizeVaultFilePath(item);
+        name = item.split('/').pop() || item;
+      } else if (item && typeof item === 'object') {
+        pathValue = normalizeVaultFilePath(item.path || '');
+        name =
+          typeof item.name === 'string' && item.name
+            ? item.name
+            : pathValue.split('/').pop() || '';
+      } else {
+        continue;
+      }
+      if (!pathValue && !name) {
+        continue;
+      }
+      const notePath = withMarkdownExtension(pathValue || name);
+      if (!notePath) {
+        continue;
+      }
+      pages.push({
+        path: notePath,
+        name: stripMarkdownExtension(name || notePath.split('/').pop() || notePath),
+      });
+    }
+    return { ok: true, pages, error: '' };
+  }
+
   function visibleProjects(projects) {
-    return (projects || []).filter((project) => project && !project.isArchived && !project.isHiddenFromMenu);
+    return (projects || []).filter(
+      (project) => project && !project.isArchived && !project.isHiddenFromMenu,
+    );
   }
 
   function openExternalUri(uri) {
@@ -318,7 +571,11 @@
       return false;
     }
     const value = String(text);
-    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+    if (
+      typeof navigator !== 'undefined' &&
+      navigator.clipboard &&
+      navigator.clipboard.writeText
+    ) {
       try {
         await navigator.clipboard.writeText(value);
         return true;
@@ -362,14 +619,13 @@
     try {
       if (api && typeof api.translate === 'function') {
         const translated = api.translate(key, params);
-        // Super Productivity's iframe translate() can return a Promise.
-        // Never write that into the DOM — it becomes "[object Promise]".
+        // iframe translate() can return a Promise — never write that into the DOM.
         if (typeof translated === 'string' && translated && translated !== key) {
           return interpolate(translated, params);
         }
       }
     } catch {
-      // fall through to the English fallback
+      // English fallback
     }
     return interpolate(fallback || key, params);
   }
@@ -377,31 +633,44 @@
   return {
     STORAGE_VERSION,
     DEFAULT_FOLDER,
+    SKIP_VAULT_DIRS,
     createEmptyState,
     parseState,
     serializeState,
     normalizeVaultFilePath,
+    normalizeVaultRootPath,
     validateFilePath,
+    validateExistingNotePath,
     stripMarkdownExtension,
     withMarkdownExtension,
-    sanitizeNoteTitle,
-    suggestFilePath,
     wikiLink,
     buildOpenUri,
-    buildNewUri,
-    noteTemplate,
     getBinding,
+    bindingTarget,
+    notePathFromBinding,
     upsertBinding,
     removeBinding,
     updateVaultSettings,
     visibleProjects,
+    filterPages,
+    rankPage,
+    listVaultPagesScript,
+    parseNodePageResult,
+    getPlatform,
+    isDesktopPlatform,
+    isMobilePlatform,
+    canBrowseVault,
+    isNoteTarget,
     openExternalUri,
     copyText,
     t,
   };
 });
 
-/* Host-side Super Productivity plugin. Concatenated after core.js. */
+/* Host-side Super Productivity plugin. Concatenated after core.js into plugin.js.
+ * Registers menu / header / side-panel entry points that open the link panel
+ * or an existing linked page via obsidian://open.
+ */
 (function () {
   'use strict';
 
@@ -431,6 +700,28 @@
     }
   }
 
+  /** Open the connector panel so the user can pick an existing Obsidian page. */
+  async function openLinkWindow(context) {
+    const ctx =
+      context ||
+      (typeof api.getActiveWorkContext === 'function'
+        ? await api.getActiveWorkContext()
+        : null);
+
+    if (ctx && ctx.type === 'PROJECT') {
+      api.showSnack({
+        msg: t(
+          'MSG.OPENING_LINK_WINDOW',
+          'Open the Obsidian Connector panel to link "{{title}}" to an existing page.',
+          { title: ctx.title || '' },
+        ),
+        type: 'INFO',
+      });
+    }
+    openPanel();
+  }
+
+  /** Open the linked page, or the link panel when the project is not linked yet. */
   async function openLinkedNote(context) {
     const ctx =
       context ||
@@ -446,7 +737,7 @@
         ),
         type: 'INFO',
       });
-      openPanel();
+      await openLinkWindow();
       return;
     }
 
@@ -456,11 +747,11 @@
       api.showSnack({
         msg: t(
           'MSG.PROJECT_NOT_LINKED',
-          'This project is not linked to an Obsidian file yet.',
+          'This project is not linked to an Obsidian page yet.',
         ),
         type: 'INFO',
       });
-      openPanel();
+      await openLinkWindow(ctx);
       return;
     }
 
@@ -482,7 +773,7 @@
 
     api.showSnack({
       msg: t('MSG.OPENING_NOTE', 'Opening {{file}} in Obsidian…', {
-        file: binding.filePath,
+        file: Core.bindingTarget(binding),
       }),
       type: 'SUCCESS',
       ico: 'menu_book',
@@ -490,6 +781,20 @@
   }
 
   function boot() {
+    // SP cannot inject into the project ⋮ work-context menu yet.
+    // Supported entry points: plugin menu, header buttons, side panel / Panels.
+    try {
+      api.registerMenuEntry({
+        label: t('MENU.LINK_PAGE', 'Link Obsidian page…'),
+        icon: 'menu_book',
+        onClick: () => {
+          openLinkWindow();
+        },
+      });
+    } catch {
+      // Host may already add a default menu entry from the manifest.
+    }
+
     try {
       api.registerMenuEntry({
         label: t('PLUGIN.NAME', 'Obsidian Connector'),
@@ -497,7 +802,7 @@
         onClick: openPanel,
       });
     } catch {
-      // Host already added a default menu entry from the manifest.
+      // Ignore duplicate registration.
     }
 
     if (typeof api.registerConfigHandler === 'function') {
@@ -507,7 +812,7 @@
     if (typeof api.registerShortcut === 'function') {
       api.registerShortcut({
         id: 'obsidian-connector-open-note',
-        label: t('SHORTCUT.OPEN_LINKED_NOTE', 'Open linked Obsidian note'),
+        label: t('SHORTCUT.OPEN_LINKED_NOTE', 'Open linked Obsidian page'),
         onExec: () => {
           openLinkedNote();
         },
@@ -516,6 +821,13 @@
         id: 'obsidian-connector-open-panel',
         label: t('SHORTCUT.OPEN_PANEL', 'Open Obsidian Connector'),
         onExec: openPanel,
+      });
+      api.registerShortcut({
+        id: 'obsidian-connector-link-page',
+        label: t('SHORTCUT.LINK_PAGE', 'Link project to Obsidian page'),
+        onExec: () => {
+          openLinkWindow();
+        },
       });
     }
 
@@ -532,8 +844,32 @@
         ...headerCfg,
         showFor: ['PROJECT'],
       });
+      try {
+        api.registerWorkContextHeaderButton({
+          label: t('HEADER.LINK_PAGE', 'Link Obsidian'),
+          icon: 'link',
+          showFor: ['PROJECT'],
+          onClick: (ctx) => {
+            openLinkWindow(ctx);
+          },
+        });
+      } catch {
+        // Older hosts may only allow one work-context header button.
+      }
     } else if (typeof api.registerHeaderButton === 'function') {
       api.registerHeaderButton(headerCfg);
+    }
+
+    if (typeof api.registerSidePanelButton === 'function') {
+      try {
+        api.registerSidePanelButton({
+          label: t('PLUGIN.NAME', 'Obsidian Connector'),
+          icon: 'menu_book',
+          onClick: openPanel,
+        });
+      } catch {
+        // Manifest sidePanel may already register one.
+      }
     }
   }
 
