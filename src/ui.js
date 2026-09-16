@@ -404,6 +404,11 @@
                 </div>
               </div>
               <div class="path text-muted">${escapeHtml(page)}</div>
+              <div class="actions">
+                <button type="button" class="primary" data-action="open">${escapeHtml(
+                  this.t('UI.OPEN', 'Open in Obsidian'),
+                )}</button>
+              </div>
             </article>
           `;
         })
@@ -411,6 +416,7 @@
 
       root.querySelectorAll('[data-action]').forEach((button) => {
         button.addEventListener('click', (event) => {
+          event.preventDefault();
           event.stopPropagation();
           const article = event.currentTarget.closest('[data-project-id]');
           const projectId = article && article.getAttribute('data-project-id');
@@ -746,7 +752,10 @@
     }
   }
 
-  document.addEventListener('click', () => {
+  document.addEventListener('click', (event) => {
+    if (event.target && event.target.closest && event.target.closest('.menu-wrap')) {
+      return;
+    }
     document.querySelectorAll('.menu-panel').forEach((panel) => {
       panel.classList.add('hidden');
     });
