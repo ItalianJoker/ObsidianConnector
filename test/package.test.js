@@ -10,7 +10,9 @@ describe('plugin package', () => {
   it('builds a ZIP with manifest.json at the root', () => {
     execFileSync('npm', ['run', 'zip'], { cwd: root, stdio: 'pipe' });
     const zipPath = path.join(root, 'dist/obsidian-connector.zip');
+    const versionedZip = path.join(root, 'dist/obsidian-connector-1.0.0.zip');
     assert.equal(fs.existsSync(zipPath), true);
+    assert.equal(fs.existsSync(versionedZip), true);
 
     const listing = execFileSync('python3', [
       '-c',
