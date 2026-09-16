@@ -1,96 +1,84 @@
 # Obsidian Connector
 
-A [Super Productivity](https://github.com/super-productivity/super-productivity) plugin that **links an existing Super Productivity project to an existing folder in your Obsidian vault**.
+A [Super Productivity](https://github.com/super-productivity/super-productivity) plugin that **links an existing Super Productivity project to an existing page in your Obsidian vault**.
 
-The plugin does **not** create Super Productivity projects and does **not** invent new notes. It lists the folders already in the vault so you can pick the one that matches the project.
-
-Opening a link uses the **Obsidian URI protocol** (`obsidian://open`). It does **not** open a filesystem path (`/home/.../folder` or `file://`). The plugin stores a vault-relative folder such as `Work/Elmec`, then turns it into:
+The plugin does **not** create Super Productivity projects and does **not** create Obsidian pages. On desktop it lists notes already in the vault; on mobile/web you enter the vault-relative path of an existing page. Opening uses `obsidian://open` only (never `obsidian://new`).
 
 ```text
 obsidian://open?vault=WorkVault&file=Work%2FElmec
 ```
 
-This is not task sync. Bindings stay as project → folder links. For checkbox sync, keep using `sync.md`.
+This is not task sync. Bindings stay as project → page links. For checkbox sync, keep using `sync.md`.
 
 ## Features
 
-- **Existing projects only** — choose from Super Productivity projects that already exist. The plugin never calls `addProject`
-- **Vault folder browser** — set the vault folder on disk, then **Load folders** to list every folder in the vault (desktop app, with file access allowed)
-- **Search and match** — filter the folder list; folders whose names match the selected project (for example `Elmec`) are listed first
-- **Project ↔ folder binding** — attach each Super Productivity project to one existing vault folder
-- **Open with `obsidian://open`** — launches that folder in Obsidian; if the vault name is empty, Obsidian uses the last used vault
-- **Copy Obsidian URI** — copies the `obsidian://open?...` link
-- **Copy wiki link** — copies `[[Work/Elmec]]`
-- **Project header button** — **Obsidian** on the project view opens the linked folder
-- **Side panel** — manage vault settings and all bindings from one panel
-- **Keyboard shortcuts** — open the linked folder, or open the connector panel (bind keys in Super Productivity keyboard settings)
-- **Synced bindings** — mappings persist with `persistDataSynced` and follow Super Productivity sync
-- **Safe paths** — only vault-relative folders; absolute paths and `..` are rejected
+- **Existing projects only** — choose from Super Productivity projects that already exist
+- **Existing Obsidian pages only** — pick a note that already exists; the plugin never creates a page
+- **Desktop page browser** — set the vault folder on disk, **Load existing pages**, search and select
+- **Mobile / web compatible** — enter the vault-relative path of an existing page; open still uses `obsidian://` (works with Obsidian Mobile). Disk browsing needs the desktop app
+- **Open with `obsidian://open`** — launches that page in Obsidian
+- **Link window entry points** — side panel (also under mobile **Panels**), plugin menu **Link Obsidian page…**, project header **Obsidian** / **Link Obsidian** buttons, and a **⋮** menu on each linked project inside the panel
+- **Copy Obsidian URI** / **Copy wiki link**
+- **Synced bindings** via `persistDataSynced`
+- **Safe paths** — only vault-relative paths; absolute paths and `..` are rejected
+
+> Super Productivity does not currently allow plugins to inject items into the project **⋮** work-context menu in the app chrome. The closest supported entry points are the project header buttons (next to that menu), the side panel / Panels menu (mobile), and the plugin menu entry **Link Obsidian page…**.
 
 ## How linking works
 
 | What | Format |
 | --- | --- |
-| Stored binding | Vault-relative folder, e.g. `Work/Elmec` |
+| Stored binding | Vault-relative page, e.g. `Work/Elmec.md` |
 | Open | `obsidian://open?vault=VaultName&file=Work%2FElmec` |
 | Wiki link | `[[Work/Elmec]]` |
-
-The `file` query parameter is the path inside the vault, URL-encoded. For a folder it is the folder path, not a `.md` file.
-
-Listing folders uses `executeNodeScript` in the Super Productivity **desktop** app. Allow the plugin file-access prompt when Super Productivity asks. The web app cannot read your disk, so the folder list is desktop-only.
 
 ## Install
 
 1. Download the plugin ZIP from the latest [GitHub Release](https://github.com/ItalianJoker/ObsidianConnector/releases)
 2. In Super Productivity open **Settings → Plugins → Choose Plugin File**
 3. Select the ZIP and enable the plugin
-4. When Super Productivity asks to allow file access, allow it so the plugin can list vault folders
+4. On desktop, allow file access when Super Productivity asks (needed only to list existing pages)
 
-The ZIP has `manifest.json` at its root, as required by the plugin installer.
-
-Requires Super Productivity **14.0.0** or later. Folder listing needs the desktop app. Obsidian must be installed on the same machine to open folders.
-
-To build the ZIP locally: `npm run zip` (writes `dist/obsidian-connector.zip` and a versioned `dist/obsidian-connector-<version>.zip`).
+Requires Super Productivity **14.0.0** or later. Works on desktop, web, Android, and iOS. Listing pages from disk needs the desktop app. Obsidian (desktop or mobile) must be installed to open pages.
 
 ## Usage
 
-1. Open the **Obsidian Connector** panel (plugin menu / side panel)
-2. Enter the **vault name** as it appears in Obsidian (usually the folder name)
-3. Enter the **vault folder on this computer** (absolute path, e.g. `/home/you/Obsidian/Work`)
-4. Click **Save**, then **Load folders**
-5. Choose an existing Super Productivity project
-6. Select the matching Obsidian folder from the list (use search if the vault is large)
-7. Click **Link to selected folder**
+### Desktop
 
-When you are inside a linked project, the **Obsidian** header button opens that folder.
+1. Open **Obsidian Connector** (side panel, plugin menu, or **Link Obsidian** header button)
+2. Enter vault name + vault folder on disk → **Save** → **Load existing pages**
+3. Choose an existing Super Productivity project
+4. Select an existing Obsidian page from the list
+5. **Link to selected page**
 
-Older bindings that pointed at a `.md` note are migrated to the note’s parent folder.
+### Mobile
+
+1. Open **Obsidian Connector** from the **Panels** menu (or the plugin entry)
+2. Enter the vault name
+3. Choose an existing Super Productivity project
+4. Type the vault-relative path of a page that already exists (e.g. `Work/Elmec.md`)
+5. **Link to selected page**
+6. **Open in Obsidian** uses `obsidian://open` with the Obsidian Mobile app
 
 ## Releases
 
-Release ZIPs are published on [GitHub Releases](https://github.com/ItalianJoker/ObsidianConnector/releases). Pushing a `v*` tag runs CI, packs the plugin, and creates the release.
-
 | Version | Notes |
 | --- | --- |
-| [v1.1.0](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.1.0) | Browse vault folders and link existing projects (no create flow) |
-| [v1.0.1](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.0.1) | Fix side-panel labels (`[object Promise]`) |
-| [v1.0.0](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.0.0) | First release: project ↔ Obsidian note linking via `obsidian://` |
+| [v1.2.0](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.2.0) | Existing pages only; mobile path entry; link-window entry points |
+| [v1.1.0](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.1.0) | Browse vault folders |
+| [v1.0.1](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.0.1) | Fix `[object Promise]` labels |
+| [v1.0.0](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.0.0) | First release |
 
-See [CHANGELOG.md](CHANGELOG.md) for the full list.
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Development
 
 ```bash
 npm test
 npm run zip
-npm run harness   # UI preview at http://127.0.0.1:4173/
+npm run harness                 # desktop harness
+# http://127.0.0.1:4173/?platform=android  # mobile UI mode
 ```
-
-- `src/` — source (shared logic, host `plugin.js`, iframe UI)
-- `plugin/` — packagable plugin files
-- `test/` — Node tests for bindings, folder listing, and Obsidian URIs
-
-The plugin uses APIs from [Develop a Plugin](https://github.com/super-productivity/super-productivity/wiki/2.15-Develop-a-Plugin) and [`docs/plugin-development.md`](https://github.com/super-productivity/super-productivity/blob/master/docs/plugin-development.md): projects, synced persistence, snacks/dialogs, side panel, project header button, `executeNodeScript` (desktop folder listing), and `obsidian://` URIs.
 
 ## License
 

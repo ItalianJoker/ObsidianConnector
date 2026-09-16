@@ -11,7 +11,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const STORAGE_VERSION = 2;
+  const STORAGE_VERSION = 3;
   const DEFAULT_FOLDER = 'Projects';
   const ILLEGAL_NAME_CHARS = /[\\/:*?"<>|]/g;
   const SKIP_VAULT_DIRS = ['.obsidian', '.trash', '.git', 'node_modules'];
@@ -24,6 +24,25 @@
       defaultFolder: DEFAULT_FOLDER,
       bindings: [],
     };
+  }
+
+  function getPlatform(api) {
+    const platform =
+      api && api.cfg && typeof api.cfg.platform === 'string' ? api.cfg.platform : '';
+    return platform || 'web';
+  }
+
+  function isDesktopPlatform(api) {
+    return getPlatform(api) === 'desktop';
+  }
+
+  function isMobilePlatform(api) {
+    const platform = getPlatform(api);
+    return platform === 'android' || platform === 'ios';
+  }
+
+  function canBrowseVault(api) {
+    return isDesktopPlatform(api) && typeof (api && api.executeNodeScript) === 'function';
   }
 
   function isPlainObject(value) {
@@ -83,8 +102,8 @@
     if (!projectId) {
       return null;
     }
-    const folderPath = folderPathFromBinding(binding);
-    if (folderPath == null) {
+    const filePath = notePathFromBinding(binding);
+    if (filePath == null) {
       return null;
     }
     const createdAt =
@@ -97,41 +116,85 @@
         : createdAt;
     return {
       projectId,
-      folderPath,
-      filePath: folderPath,
+      filePath,
+      folderPath: isNoteTarget(filePath) ? parentFolderOf(filePath) : filePath,
       createdAt,
       updatedAt,
     };
   }
 
-  function folderPathFromBinding(binding) {
-    const raw =
-      typeof binding.folderPath === 'string'
-        ? binding.folderPath
-        : typeof binding.filePath === 'string'
-          ? binding.filePath
-          : null;
-    if (raw == null) {
+  function parentFolderOf(filePath) {
+    const normalized = normalizeVaultFilePath(filePath);
+    if (!normalized) {
+      return '';
+    }
+    const parts = normalized.split('/');
+    if (parts.length <= 1) {
+      return '';
+    }
+    parts.pop();
+    return parts.join('/');
+  }
+
+  /**
+   * Resolve the vault-relative Obsidian target for a binding.
+   * Prefers an existing note path; keeps older folder-only bindings openable.
+   */
+  function notePathFromBinding(binding) {
+    if (!isPlainObject(binding)) {
       return null;
     }
-    const filePath = normalizeVaultFilePath(raw);
-    if (raw.trim() && !filePath) {
-      return null;
+    const rawFile = typeof binding.filePath === 'string' ? binding.filePath : null;
+    const rawFolder = typeof binding.folderPath === 'string' ? binding.folderPath : null;
+
+    if (rawFile != null && rawFile.trim()) {
+      const filePath = normalizeVaultFilePath(rawFile);
+      if (!filePath) {
+        return null;
+      }
+      if (/\.md$/i.test(filePath)) {
+        return withMarkdownExtension(filePath);
+      }
+      const folder = rawFolder != null ? normalizeVaultFilePath(rawFolder) : null;
+      // v1.1 stored folder bindings with filePath === folderPath (no .md).
+      if (folder != null && folder === filePath) {
+        return filePath;
+      }
+      return withMarkdownExtension(filePath);
     }
-    if (/\.md$/i.test(filePath)) {
-      const parts = filePath.split('/');
-      parts.pop();
-      return parts.join('/');
+
+    if (rawFolder != null) {
+      const folder = normalizeVaultFilePath(rawFolder);
+      if (rawFolder.trim() && !folder) {
+        return null;
+      }
+      return folder;
     }
-    return filePath;
+    return null;
+  }
+
+  function isNoteTarget(path) {
+    return /\.md$/i.test(String(path || ''));
   }
 
   function bindingTarget(binding) {
     if (!binding) {
       return '';
     }
-    const migrated = folderPathFromBinding(binding);
-    return migrated == null ? '' : migrated;
+    const target = notePathFromBinding(binding);
+    return target == null ? '' : target;
+  }
+
+  // Backwards-compatible alias used by older tests/call sites.
+  function folderPathFromBinding(binding) {
+    const target = notePathFromBinding(binding);
+    if (target == null) {
+      return null;
+    }
+    if (isNoteTarget(target)) {
+      return parentFolderOf(target);
+    }
+    return target;
   }
 
   /**
@@ -195,10 +258,18 @@
       return {
         ok: false,
         message:
-          'Choose an existing folder inside the vault (no absolute paths or ..).',
+          'Choose an existing page inside the vault (no absolute paths or ..).',
       };
     }
     return { ok: true, path: normalized };
+  }
+
+  function validateExistingNotePath(filePath) {
+    const validated = validateFilePath(filePath);
+    if (!validated.ok) {
+      return validated;
+    }
+    return { ok: true, path: withMarkdownExtension(validated.path) };
   }
 
   function stripMarkdownExtension(filePath) {
@@ -300,29 +371,16 @@
     return state.bindings.find((binding) => binding.projectId === projectId) || null;
   }
 
-  function asFolderPath(folderPath) {
-    if (folderPath == null || String(folderPath).trim() === '') {
-      return { ok: true, path: '' };
-    }
-    const validated = validateFilePath(folderPath);
-    if (!validated.ok) {
-      return validated;
-    }
-    let path = validated.path;
-    if (/\.md$/i.test(path)) {
-      const parts = path.split('/');
-      parts.pop();
-      path = parts.join('/');
-    }
-    return { ok: true, path };
+  function asNotePath(filePath) {
+    return validateExistingNotePath(filePath);
   }
 
-  function upsertBinding(state, projectId, folderPath, now) {
+  function upsertBinding(state, projectId, filePath, now) {
     const next = parseState(state);
     if (!projectId) {
       return { ok: false, state: next, message: 'Choose an existing Super Productivity project.' };
     }
-    const validated = asFolderPath(folderPath);
+    const validated = asNotePath(filePath);
     if (!validated.ok) {
       return { ok: false, state: next, message: validated.message };
     }
@@ -331,14 +389,14 @@
     const existing = getBinding(next, projectId);
     const binding = {
       projectId,
-      folderPath: path,
       filePath: path,
+      folderPath: parentFolderOf(path),
       createdAt: existing ? existing.createdAt : timestamp,
       updatedAt: timestamp,
     };
     next.bindings = next.bindings.filter((item) => item.projectId !== projectId);
     next.bindings.push(binding);
-    next.bindings.sort((a, b) => a.folderPath.localeCompare(b.folderPath));
+    next.bindings.sort((a, b) => a.filePath.localeCompare(b.filePath));
     return { ok: true, state: next, binding };
   }
 
@@ -419,6 +477,39 @@
     return filtered;
   }
 
+  function rankPage(pagePath, projectTitle) {
+    return rankFolder(stripMarkdownExtension(pagePath), projectTitle);
+  }
+
+  function filterPages(pages, query, projectTitle) {
+    const list = Array.isArray(pages) ? pages.slice() : [];
+    const needle = String(query || '').trim().toLowerCase();
+    const filtered = needle
+      ? list.filter((page) => {
+          const path = typeof page === 'string' ? page : page && page.path;
+          const name = typeof page === 'string' ? page : page && page.name;
+          return (
+            String(path || '')
+              .toLowerCase()
+              .includes(needle) ||
+            String(name || '')
+              .toLowerCase()
+              .includes(needle)
+          );
+        })
+      : list;
+    filtered.sort((a, b) => {
+      const pathA = typeof a === 'string' ? a : a.path || '';
+      const pathB = typeof b === 'string' ? b : b.path || '';
+      const rank = rankPage(pathB, projectTitle) - rankPage(pathA, projectTitle);
+      if (rank !== 0) {
+        return rank;
+      }
+      return pathA.localeCompare(pathB);
+    });
+    return filtered;
+  }
+
   function listVaultFoldersScript(vaultRoot) {
     const root = normalizeVaultRootPath(vaultRoot);
     return `
@@ -464,32 +555,124 @@ return folders;
 `;
   }
 
+  function listVaultPagesScript(vaultRoot) {
+    const root = normalizeVaultRootPath(vaultRoot);
+    return `
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(${JSON.stringify(root)});
+if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+  throw new Error('Vault folder not found');
+}
+const skip = new Set(${JSON.stringify(SKIP_VAULT_DIRS)});
+const pages = [];
+function walk(dir, rel, depth) {
+  if (depth > 10 || pages.length >= 5000) {
+    return;
+  }
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch (e) {
+    return;
+  }
+  for (const name of names) {
+    if (!name || name.charAt(0) === '.' || skip.has(name)) {
+      continue;
+    }
+    const full = path.join(dir, name);
+    let st;
+    try {
+      st = fs.statSync(full);
+    } catch (e) {
+      continue;
+    }
+    if (st.isDirectory()) {
+      const relative = rel ? rel + '/' + name : name;
+      walk(full, relative, depth + 1);
+      continue;
+    }
+    if (!st.isFile() || !/\\.md$/i.test(name)) {
+      continue;
+    }
+    const relative = rel ? rel + '/' + name : name;
+    pages.push({
+      path: relative.replace(/\\\\/g, '/'),
+      name: name.replace(/\\.md$/i, ''),
+    });
+  }
+}
+walk(root, '', 0);
+return pages;
+`;
+  }
+
   function parseNodeFolderResult(result) {
     if (!result || result.success === false) {
       const error =
         (result && result.error && result.error.message) ||
         (result && result.error) ||
         'Could not read the vault folder.';
-      return { ok: false, folders: [], error: String(error) };
+      return { ok: false, folders: [], pages: [], error: String(error) };
     }
     const raw = result.result;
     if (!Array.isArray(raw)) {
-      return { ok: false, folders: [], error: 'Unexpected folder list from the desktop app.' };
+      return {
+        ok: false,
+        folders: [],
+        pages: [],
+        error: 'Unexpected list from the desktop app.',
+      };
     }
-    const folders = raw
-      .map((item) => {
-        if (typeof item === 'string') {
-          return { path: normalizeVaultFilePath(item), name: item.split('/').pop() || item };
-        }
-        if (item && typeof item === 'object') {
-          const folderPath = normalizeVaultFilePath(item.path || '');
-          const name = typeof item.name === 'string' && item.name ? item.name : folderPath.split('/').pop() || '(vault root)';
-          return { path: folderPath, name };
-        }
-        return null;
-      })
-      .filter(Boolean);
-    return { ok: true, folders, error: '' };
+    const folders = [];
+    const pages = [];
+    for (const item of raw) {
+      let pathValue = '';
+      let name = '';
+      if (typeof item === 'string') {
+        pathValue = normalizeVaultFilePath(item);
+        name = item.split('/').pop() || item;
+      } else if (item && typeof item === 'object') {
+        pathValue = normalizeVaultFilePath(item.path || '');
+        name =
+          typeof item.name === 'string' && item.name
+            ? item.name
+            : pathValue.split('/').pop() || '';
+      } else {
+        continue;
+      }
+      if (/\.md$/i.test(pathValue) || /\.md$/i.test(name)) {
+        const notePath = withMarkdownExtension(pathValue || name);
+        pages.push({
+          path: notePath,
+          name: stripMarkdownExtension(name || notePath.split('/').pop() || notePath),
+        });
+      } else {
+        folders.push({
+          path: pathValue,
+          name: name || pathValue.split('/').pop() || '(vault root)',
+        });
+      }
+    }
+    return { ok: true, folders, pages, error: '' };
+  }
+
+  function parseNodePageResult(result) {
+    const parsed = parseNodeFolderResult(result);
+    if (!parsed.ok) {
+      return { ok: false, pages: [], error: parsed.error };
+    }
+    if (parsed.pages.length) {
+      return { ok: true, pages: parsed.pages, error: '' };
+    }
+    // Some hosts may return plain note path strings without .md in name.
+    const pages = (parsed.folders || [])
+      .filter((item) => item && item.path)
+      .map((item) => ({
+        path: withMarkdownExtension(item.path),
+        name: stripMarkdownExtension(item.name || item.path),
+      }));
+    return { ok: true, pages, error: '' };
   }
 
   function visibleProjects(projects) {
@@ -600,6 +783,7 @@ return folders;
     normalizeVaultFilePath,
     normalizeVaultRootPath,
     validateFilePath,
+    validateExistingNotePath,
     stripMarkdownExtension,
     withMarkdownExtension,
     sanitizeNoteTitle,
@@ -610,15 +794,25 @@ return folders;
     noteTemplate,
     getBinding,
     bindingTarget,
-    asFolderPath,
+    notePathFromBinding,
+    asNotePath,
     upsertBinding,
     removeBinding,
     updateVaultSettings,
     visibleProjects,
     filterFolders,
+    filterPages,
     rankFolder,
+    rankPage,
     listVaultFoldersScript,
+    listVaultPagesScript,
     parseNodeFolderResult,
+    parseNodePageResult,
+    getPlatform,
+    isDesktopPlatform,
+    isMobilePlatform,
+    canBrowseVault,
+    isNoteTarget,
     openExternalUri,
     copyText,
     t,

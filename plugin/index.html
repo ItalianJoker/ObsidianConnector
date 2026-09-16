@@ -187,6 +187,10 @@ body {
   color: var(--c-warn, #c62828);
 }
 
+.platform-banner {
+  margin: 0 0 var(--s2, 16px);
+}
+
 .folder-list {
   max-height: 260px;
   overflow: auto;
@@ -210,7 +214,8 @@ body {
   background: transparent;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85em;
-  padding: 8px 10px;
+  padding: 10px 12px;
+  min-height: 44px;
 }
 
 .folder-item:last-child {
@@ -236,6 +241,77 @@ body {
   word-break: break-all;
 }
 
+.binding-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s, 8px);
+}
+
+.menu-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.menu-panel {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 5;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--divider-color, #c5c5c5);
+  border-radius: 8px;
+  box-shadow: var(--whiteframe-shadow-3dp, 0 4px 12px rgba(0, 0, 0, 0.16));
+  padding: 4px;
+}
+
+.menu-panel button {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  padding: 10px 12px;
+  min-height: 44px;
+}
+
+.menu-panel button:hover,
+.menu-panel button:focus-visible {
+  background: color-mix(in srgb, var(--c-primary, #5b7fff) 12%, transparent);
+}
+
+@media (max-width: 520px) {
+  body {
+    padding: 12px;
+  }
+
+  .banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actions,
+  .row {
+    width: 100%;
+  }
+
+  .actions button,
+  .row button {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+}
+
     </style>
   </head>
   <body class="notranslate">
@@ -244,11 +320,12 @@ body {
         <h1 id="title">Obsidian Connector</h1>
         <p id="lede" class="lede text-muted">
           Pick an existing Super Productivity project and link it to an existing
-          folder in your Obsidian vault. Nothing new is created.
+          page in your Obsidian vault. The plugin never creates a new page.
         </p>
       </header>
 
       <p id="status" class="status" aria-live="polite"></p>
+      <p id="platform-banner" class="hint text-muted platform-banner"></p>
 
       <section id="current-banner" class="card banner hidden">
         <div>
@@ -274,25 +351,26 @@ body {
           />
         </div>
         <p id="vault-name-hint" class="hint text-muted">
-          The name shown in Obsidian. Used only to open the folder with obsidian://
+          The name shown in Obsidian. Used only to open the page with obsidian://
         </p>
-        <div class="field">
-          <label id="vault-path-label" for="vault-path">Vault folder on this computer</label>
-          <input
-            id="vault-path"
-            type="text"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="/home/you/Obsidian/Work"
-          />
+        <div id="vault-path-block">
+          <div class="field">
+            <label id="vault-path-label" for="vault-path">Vault folder on this computer</label>
+            <input
+              id="vault-path"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="/home/you/Obsidian/Work"
+            />
+          </div>
+          <p id="vault-path-hint" class="hint text-muted">
+            Absolute path to the vault. Desktop only — used to list existing pages.
+          </p>
         </div>
-        <p id="vault-path-hint" class="hint text-muted">
-          Absolute path to the vault, e.g. /home/you/Obsidian/Work. Needed to list
-          folders. Desktop app only.
-        </p>
         <div class="row">
           <button id="save-vault" type="button" class="primary">Save</button>
-          <button id="load-folders" type="button">Load folders</button>
+          <button id="load-pages" type="button">Load existing pages</button>
         </div>
       </section>
 
@@ -306,27 +384,47 @@ body {
           Only projects that already exist in Super Productivity are listed. This
           plugin never creates a project.
         </p>
-        <div class="field">
-          <label id="folder-label" for="folder-search">Obsidian folder</label>
-          <input
-            id="folder-search"
-            type="search"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="Search folders…"
-          />
+
+        <div id="desktop-page-picker">
+          <div class="field">
+            <label id="page-label" for="page-search">Existing Obsidian page</label>
+            <input
+              id="page-search"
+              type="search"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Search existing pages…"
+            />
+          </div>
+          <p id="page-hint" class="hint text-muted">
+            Choose a page that already exists in the vault. Nothing new is created.
+          </p>
+          <div id="page-list" class="folder-list" role="listbox" aria-label="Existing Obsidian pages"></div>
         </div>
-        <p id="folder-hint" class="hint text-muted">
-          Choose the vault folder that matches this project. Load folders after
-          setting the vault path.
-        </p>
-        <div id="folder-list" class="folder-list" role="listbox" aria-label="Obsidian folders"></div>
+
+        <div id="mobile-page-entry" class="hidden">
+          <div class="field">
+            <label id="manual-page-label" for="manual-page">Existing page path</label>
+            <input
+              id="manual-page"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Projects/Website.md"
+            />
+          </div>
+          <p id="manual-page-hint" class="hint text-muted">
+            Enter the vault-relative path of a page that already exists. On mobile,
+            browsing the vault disk is unavailable — type the path of an existing note.
+          </p>
+        </div>
+
         <p class="selected-folder">
-          <span id="selected-folder-label">Selected folder</span>:
-          <code id="selected-folder">No folder selected</code>
+          <span id="selected-page-label">Selected page</span>:
+          <code id="selected-page">No page selected</code>
         </p>
         <div class="row">
-          <button id="save-binding" type="button" class="primary">Link to selected folder</button>
+          <button id="save-binding" type="button" class="primary">Link to selected page</button>
         </div>
       </section>
 
@@ -350,7 +448,7 @@ body {
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const STORAGE_VERSION = 2;
+  const STORAGE_VERSION = 3;
   const DEFAULT_FOLDER = 'Projects';
   const ILLEGAL_NAME_CHARS = /[\\/:*?"<>|]/g;
   const SKIP_VAULT_DIRS = ['.obsidian', '.trash', '.git', 'node_modules'];
@@ -363,6 +461,25 @@ body {
       defaultFolder: DEFAULT_FOLDER,
       bindings: [],
     };
+  }
+
+  function getPlatform(api) {
+    const platform =
+      api && api.cfg && typeof api.cfg.platform === 'string' ? api.cfg.platform : '';
+    return platform || 'web';
+  }
+
+  function isDesktopPlatform(api) {
+    return getPlatform(api) === 'desktop';
+  }
+
+  function isMobilePlatform(api) {
+    const platform = getPlatform(api);
+    return platform === 'android' || platform === 'ios';
+  }
+
+  function canBrowseVault(api) {
+    return isDesktopPlatform(api) && typeof (api && api.executeNodeScript) === 'function';
   }
 
   function isPlainObject(value) {
@@ -422,8 +539,8 @@ body {
     if (!projectId) {
       return null;
     }
-    const folderPath = folderPathFromBinding(binding);
-    if (folderPath == null) {
+    const filePath = notePathFromBinding(binding);
+    if (filePath == null) {
       return null;
     }
     const createdAt =
@@ -436,41 +553,85 @@ body {
         : createdAt;
     return {
       projectId,
-      folderPath,
-      filePath: folderPath,
+      filePath,
+      folderPath: isNoteTarget(filePath) ? parentFolderOf(filePath) : filePath,
       createdAt,
       updatedAt,
     };
   }
 
-  function folderPathFromBinding(binding) {
-    const raw =
-      typeof binding.folderPath === 'string'
-        ? binding.folderPath
-        : typeof binding.filePath === 'string'
-          ? binding.filePath
-          : null;
-    if (raw == null) {
+  function parentFolderOf(filePath) {
+    const normalized = normalizeVaultFilePath(filePath);
+    if (!normalized) {
+      return '';
+    }
+    const parts = normalized.split('/');
+    if (parts.length <= 1) {
+      return '';
+    }
+    parts.pop();
+    return parts.join('/');
+  }
+
+  /**
+   * Resolve the vault-relative Obsidian target for a binding.
+   * Prefers an existing note path; keeps older folder-only bindings openable.
+   */
+  function notePathFromBinding(binding) {
+    if (!isPlainObject(binding)) {
       return null;
     }
-    const filePath = normalizeVaultFilePath(raw);
-    if (raw.trim() && !filePath) {
-      return null;
+    const rawFile = typeof binding.filePath === 'string' ? binding.filePath : null;
+    const rawFolder = typeof binding.folderPath === 'string' ? binding.folderPath : null;
+
+    if (rawFile != null && rawFile.trim()) {
+      const filePath = normalizeVaultFilePath(rawFile);
+      if (!filePath) {
+        return null;
+      }
+      if (/\.md$/i.test(filePath)) {
+        return withMarkdownExtension(filePath);
+      }
+      const folder = rawFolder != null ? normalizeVaultFilePath(rawFolder) : null;
+      // v1.1 stored folder bindings with filePath === folderPath (no .md).
+      if (folder != null && folder === filePath) {
+        return filePath;
+      }
+      return withMarkdownExtension(filePath);
     }
-    if (/\.md$/i.test(filePath)) {
-      const parts = filePath.split('/');
-      parts.pop();
-      return parts.join('/');
+
+    if (rawFolder != null) {
+      const folder = normalizeVaultFilePath(rawFolder);
+      if (rawFolder.trim() && !folder) {
+        return null;
+      }
+      return folder;
     }
-    return filePath;
+    return null;
+  }
+
+  function isNoteTarget(path) {
+    return /\.md$/i.test(String(path || ''));
   }
 
   function bindingTarget(binding) {
     if (!binding) {
       return '';
     }
-    const migrated = folderPathFromBinding(binding);
-    return migrated == null ? '' : migrated;
+    const target = notePathFromBinding(binding);
+    return target == null ? '' : target;
+  }
+
+  // Backwards-compatible alias used by older tests/call sites.
+  function folderPathFromBinding(binding) {
+    const target = notePathFromBinding(binding);
+    if (target == null) {
+      return null;
+    }
+    if (isNoteTarget(target)) {
+      return parentFolderOf(target);
+    }
+    return target;
   }
 
   /**
@@ -534,10 +695,18 @@ body {
       return {
         ok: false,
         message:
-          'Choose an existing folder inside the vault (no absolute paths or ..).',
+          'Choose an existing page inside the vault (no absolute paths or ..).',
       };
     }
     return { ok: true, path: normalized };
+  }
+
+  function validateExistingNotePath(filePath) {
+    const validated = validateFilePath(filePath);
+    if (!validated.ok) {
+      return validated;
+    }
+    return { ok: true, path: withMarkdownExtension(validated.path) };
   }
 
   function stripMarkdownExtension(filePath) {
@@ -639,29 +808,16 @@ body {
     return state.bindings.find((binding) => binding.projectId === projectId) || null;
   }
 
-  function asFolderPath(folderPath) {
-    if (folderPath == null || String(folderPath).trim() === '') {
-      return { ok: true, path: '' };
-    }
-    const validated = validateFilePath(folderPath);
-    if (!validated.ok) {
-      return validated;
-    }
-    let path = validated.path;
-    if (/\.md$/i.test(path)) {
-      const parts = path.split('/');
-      parts.pop();
-      path = parts.join('/');
-    }
-    return { ok: true, path };
+  function asNotePath(filePath) {
+    return validateExistingNotePath(filePath);
   }
 
-  function upsertBinding(state, projectId, folderPath, now) {
+  function upsertBinding(state, projectId, filePath, now) {
     const next = parseState(state);
     if (!projectId) {
       return { ok: false, state: next, message: 'Choose an existing Super Productivity project.' };
     }
-    const validated = asFolderPath(folderPath);
+    const validated = asNotePath(filePath);
     if (!validated.ok) {
       return { ok: false, state: next, message: validated.message };
     }
@@ -670,14 +826,14 @@ body {
     const existing = getBinding(next, projectId);
     const binding = {
       projectId,
-      folderPath: path,
       filePath: path,
+      folderPath: parentFolderOf(path),
       createdAt: existing ? existing.createdAt : timestamp,
       updatedAt: timestamp,
     };
     next.bindings = next.bindings.filter((item) => item.projectId !== projectId);
     next.bindings.push(binding);
-    next.bindings.sort((a, b) => a.folderPath.localeCompare(b.folderPath));
+    next.bindings.sort((a, b) => a.filePath.localeCompare(b.filePath));
     return { ok: true, state: next, binding };
   }
 
@@ -758,6 +914,39 @@ body {
     return filtered;
   }
 
+  function rankPage(pagePath, projectTitle) {
+    return rankFolder(stripMarkdownExtension(pagePath), projectTitle);
+  }
+
+  function filterPages(pages, query, projectTitle) {
+    const list = Array.isArray(pages) ? pages.slice() : [];
+    const needle = String(query || '').trim().toLowerCase();
+    const filtered = needle
+      ? list.filter((page) => {
+          const path = typeof page === 'string' ? page : page && page.path;
+          const name = typeof page === 'string' ? page : page && page.name;
+          return (
+            String(path || '')
+              .toLowerCase()
+              .includes(needle) ||
+            String(name || '')
+              .toLowerCase()
+              .includes(needle)
+          );
+        })
+      : list;
+    filtered.sort((a, b) => {
+      const pathA = typeof a === 'string' ? a : a.path || '';
+      const pathB = typeof b === 'string' ? b : b.path || '';
+      const rank = rankPage(pathB, projectTitle) - rankPage(pathA, projectTitle);
+      if (rank !== 0) {
+        return rank;
+      }
+      return pathA.localeCompare(pathB);
+    });
+    return filtered;
+  }
+
   function listVaultFoldersScript(vaultRoot) {
     const root = normalizeVaultRootPath(vaultRoot);
     return `
@@ -803,32 +992,124 @@ return folders;
 `;
   }
 
+  function listVaultPagesScript(vaultRoot) {
+    const root = normalizeVaultRootPath(vaultRoot);
+    return `
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(${JSON.stringify(root)});
+if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+  throw new Error('Vault folder not found');
+}
+const skip = new Set(${JSON.stringify(SKIP_VAULT_DIRS)});
+const pages = [];
+function walk(dir, rel, depth) {
+  if (depth > 10 || pages.length >= 5000) {
+    return;
+  }
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch (e) {
+    return;
+  }
+  for (const name of names) {
+    if (!name || name.charAt(0) === '.' || skip.has(name)) {
+      continue;
+    }
+    const full = path.join(dir, name);
+    let st;
+    try {
+      st = fs.statSync(full);
+    } catch (e) {
+      continue;
+    }
+    if (st.isDirectory()) {
+      const relative = rel ? rel + '/' + name : name;
+      walk(full, relative, depth + 1);
+      continue;
+    }
+    if (!st.isFile() || !/\\.md$/i.test(name)) {
+      continue;
+    }
+    const relative = rel ? rel + '/' + name : name;
+    pages.push({
+      path: relative.replace(/\\\\/g, '/'),
+      name: name.replace(/\\.md$/i, ''),
+    });
+  }
+}
+walk(root, '', 0);
+return pages;
+`;
+  }
+
   function parseNodeFolderResult(result) {
     if (!result || result.success === false) {
       const error =
         (result && result.error && result.error.message) ||
         (result && result.error) ||
         'Could not read the vault folder.';
-      return { ok: false, folders: [], error: String(error) };
+      return { ok: false, folders: [], pages: [], error: String(error) };
     }
     const raw = result.result;
     if (!Array.isArray(raw)) {
-      return { ok: false, folders: [], error: 'Unexpected folder list from the desktop app.' };
+      return {
+        ok: false,
+        folders: [],
+        pages: [],
+        error: 'Unexpected list from the desktop app.',
+      };
     }
-    const folders = raw
-      .map((item) => {
-        if (typeof item === 'string') {
-          return { path: normalizeVaultFilePath(item), name: item.split('/').pop() || item };
-        }
-        if (item && typeof item === 'object') {
-          const folderPath = normalizeVaultFilePath(item.path || '');
-          const name = typeof item.name === 'string' && item.name ? item.name : folderPath.split('/').pop() || '(vault root)';
-          return { path: folderPath, name };
-        }
-        return null;
-      })
-      .filter(Boolean);
-    return { ok: true, folders, error: '' };
+    const folders = [];
+    const pages = [];
+    for (const item of raw) {
+      let pathValue = '';
+      let name = '';
+      if (typeof item === 'string') {
+        pathValue = normalizeVaultFilePath(item);
+        name = item.split('/').pop() || item;
+      } else if (item && typeof item === 'object') {
+        pathValue = normalizeVaultFilePath(item.path || '');
+        name =
+          typeof item.name === 'string' && item.name
+            ? item.name
+            : pathValue.split('/').pop() || '';
+      } else {
+        continue;
+      }
+      if (/\.md$/i.test(pathValue) || /\.md$/i.test(name)) {
+        const notePath = withMarkdownExtension(pathValue || name);
+        pages.push({
+          path: notePath,
+          name: stripMarkdownExtension(name || notePath.split('/').pop() || notePath),
+        });
+      } else {
+        folders.push({
+          path: pathValue,
+          name: name || pathValue.split('/').pop() || '(vault root)',
+        });
+      }
+    }
+    return { ok: true, folders, pages, error: '' };
+  }
+
+  function parseNodePageResult(result) {
+    const parsed = parseNodeFolderResult(result);
+    if (!parsed.ok) {
+      return { ok: false, pages: [], error: parsed.error };
+    }
+    if (parsed.pages.length) {
+      return { ok: true, pages: parsed.pages, error: '' };
+    }
+    // Some hosts may return plain note path strings without .md in name.
+    const pages = (parsed.folders || [])
+      .filter((item) => item && item.path)
+      .map((item) => ({
+        path: withMarkdownExtension(item.path),
+        name: stripMarkdownExtension(item.name || item.path),
+      }));
+    return { ok: true, pages, error: '' };
   }
 
   function visibleProjects(projects) {
@@ -939,6 +1220,7 @@ return folders;
     normalizeVaultFilePath,
     normalizeVaultRootPath,
     validateFilePath,
+    validateExistingNotePath,
     stripMarkdownExtension,
     withMarkdownExtension,
     sanitizeNoteTitle,
@@ -949,15 +1231,25 @@ return folders;
     noteTemplate,
     getBinding,
     bindingTarget,
-    asFolderPath,
+    notePathFromBinding,
+    asNotePath,
     upsertBinding,
     removeBinding,
     updateVaultSettings,
     visibleProjects,
     filterFolders,
+    filterPages,
     rankFolder,
+    rankPage,
     listVaultFoldersScript,
+    listVaultPagesScript,
     parseNodeFolderResult,
+    parseNodePageResult,
+    getPlatform,
+    isDesktopPlatform,
+    isMobilePlatform,
+    canBrowseVault,
+    isNoteTarget,
     openExternalUri,
     copyText,
     t,
@@ -1000,10 +1292,10 @@ return folders;
       this.state = Core.createEmptyState();
       this.projects = [];
       this.context = null;
-      this.folders = [];
-      this.selectedFolder = '';
-      this.folderQuery = '';
-      this.folderPicked = false;
+      this.pages = [];
+      this.selectedPage = '';
+      this.pageQuery = '';
+      this.pagePicked = false;
       this.lastProjectId = '';
     }
 
@@ -1012,17 +1304,50 @@ return folders;
       return typeof value === 'string' && value ? value : fallback || key;
     }
 
-    canScanVault() {
-      return typeof PluginAPI.executeNodeScript === 'function';
+    canBrowse() {
+      return Core.canBrowseVault(PluginAPI);
+    }
+
+    isMobile() {
+      return Core.isMobilePlatform(PluginAPI);
     }
 
     async init() {
       this.bindEvents();
       this.applyStaticText();
+      this.applyPlatformMode();
       await this.refresh();
       this.setupHooks();
-      if (this.state.vaultPath) {
-        await this.loadFolders();
+      if (this.canBrowse() && this.state.vaultPath) {
+        await this.loadPages();
+      }
+    }
+
+    applyPlatformMode() {
+      const desktopPicker = qs('desktop-page-picker');
+      const mobileEntry = qs('mobile-page-entry');
+      const vaultPathBlock = qs('vault-path-block');
+      const loadBtn = qs('load-pages');
+      const banner = qs('platform-banner');
+
+      if (this.canBrowse()) {
+        desktopPicker.classList.remove('hidden');
+        mobileEntry.classList.add('hidden');
+        vaultPathBlock.classList.remove('hidden');
+        loadBtn.classList.remove('hidden');
+        banner.textContent = this.t(
+          'UI.PLATFORM_DESKTOP',
+          'Desktop: load existing pages from the vault folder, then pick one. The plugin never creates a page.',
+        );
+      } else {
+        desktopPicker.classList.add('hidden');
+        mobileEntry.classList.remove('hidden');
+        vaultPathBlock.classList.add('hidden');
+        loadBtn.classList.add('hidden');
+        banner.textContent = this.t(
+          'UI.PLATFORM_MOBILE',
+          'Mobile / web: enter the vault-relative path of an existing Obsidian page. Disk browsing needs the desktop app. Opening still uses obsidian://.',
+        );
       }
     }
 
@@ -1031,13 +1356,13 @@ return folders;
       qs('title').textContent = this.t('PLUGIN.NAME', 'Obsidian Connector');
       qs('lede').textContent = this.t(
         'UI.LEDE',
-        'Pick an existing Super Productivity project and link it to an existing folder in your Obsidian vault. Nothing new is created.',
+        'Pick an existing Super Productivity project and link it to an existing page in your Obsidian vault. The plugin never creates a new page.',
       );
       qs('vault-heading').textContent = this.t('UI.VAULT', 'Obsidian vault');
       qs('vault-name-label').textContent = this.t('UI.VAULT_NAME', 'Vault name');
       qs('vault-name-hint').textContent = this.t(
         'UI.VAULT_NAME_HINT',
-        'The name shown in Obsidian. Used only to open the folder with obsidian://',
+        'The name shown in Obsidian. Used only to open the page with obsidian://',
       );
       qs('vault-path-label').textContent = this.t(
         'UI.VAULT_PATH',
@@ -1045,10 +1370,10 @@ return folders;
       );
       qs('vault-path-hint').textContent = this.t(
         'UI.VAULT_PATH_HINT',
-        'Absolute path to the vault, e.g. /home/you/Obsidian/Work. Needed to list folders. Desktop app only.',
+        'Absolute path to the vault. Desktop only — used to list existing pages.',
       );
       qs('save-vault').textContent = this.t('UI.SAVE', 'Save');
-      qs('load-folders').textContent = this.t('UI.LOAD_FOLDERS', 'Load folders');
+      qs('load-pages').textContent = this.t('UI.LOAD_PAGES', 'Load existing pages');
       qs('link-heading').textContent = this.t(
         'UI.NEW_LINK',
         'Link an existing project',
@@ -1061,22 +1386,30 @@ return folders;
         'UI.PROJECT_HINT',
         'Only projects that already exist in Super Productivity are listed. This plugin never creates a project.',
       );
-      qs('folder-label').textContent = this.t(
-        'UI.FOLDER',
-        'Obsidian folder',
+      qs('page-label').textContent = this.t(
+        'UI.PAGE',
+        'Existing Obsidian page',
       );
-      qs('folder-hint').textContent = this.t(
-        'UI.FOLDER_HINT',
-        'Choose the vault folder that matches this project. Load folders after setting the vault path.',
+      qs('page-hint').textContent = this.t(
+        'UI.PAGE_HINT',
+        'Choose a page that already exists in the vault. Nothing new is created.',
       );
-      qs('folder-search').placeholder = this.t(
-        'UI.FOLDER_SEARCH',
-        'Search folders…',
+      qs('page-search').placeholder = this.t(
+        'UI.PAGE_SEARCH',
+        'Search existing pages…',
       );
-      qs('save-binding').textContent = this.t('UI.LINK', 'Link to selected folder');
-      qs('selected-folder-label').textContent = this.t(
-        'UI.SELECTED_FOLDER',
-        'Selected folder',
+      qs('manual-page-label').textContent = this.t(
+        'UI.MANUAL_PAGE',
+        'Existing page path',
+      );
+      qs('manual-page-hint').textContent = this.t(
+        'UI.MANUAL_PAGE_HINT',
+        'Enter the vault-relative path of a page that already exists. On mobile, browsing the vault disk is unavailable — type the path of an existing note.',
+      );
+      qs('save-binding').textContent = this.t('UI.LINK', 'Link to selected page');
+      qs('selected-page-label').textContent = this.t(
+        'UI.SELECTED_PAGE',
+        'Selected page',
       );
       qs('list-heading').textContent = this.t('UI.LINKED', 'Linked projects');
       qs('banner-open').textContent = this.t('UI.OPEN', 'Open in Obsidian');
@@ -1084,12 +1417,17 @@ return folders;
 
     bindEvents() {
       qs('save-vault').addEventListener('click', () => this.saveVault());
-      qs('load-folders').addEventListener('click', () => this.loadFolders());
+      qs('load-pages').addEventListener('click', () => this.loadPages());
       qs('save-binding').addEventListener('click', () => this.saveBinding());
       qs('project-select').addEventListener('change', () => this.onProjectChange());
-      qs('folder-search').addEventListener('input', () => {
-        this.folderQuery = qs('folder-search').value;
-        this.renderFolderList();
+      qs('page-search').addEventListener('input', () => {
+        this.pageQuery = qs('page-search').value;
+        this.renderPageList();
+      });
+      qs('manual-page').addEventListener('input', () => {
+        this.selectedPage = qs('manual-page').value.trim();
+        this.pagePicked = !!this.selectedPage;
+        this.renderSelectedPage();
       });
       qs('banner-open').addEventListener('click', () => this.openCurrent());
       qs('banner-link').addEventListener('click', () => this.prefillCurrent());
@@ -1147,10 +1485,12 @@ return folders;
     render() {
       qs('vault-name').value = this.state.vaultName;
       qs('vault-path').value = this.state.vaultPath;
+      this.applyPlatformMode();
       this.renderProjectSelect();
       this.renderBanner();
-      this.renderFolderList();
+      this.renderPageList();
       this.renderBindings();
+      this.renderSelectedPage();
     }
 
     renderProjectSelect() {
@@ -1194,74 +1534,73 @@ return folders;
       const openBtn = qs('banner-open');
       const linkBtn = qs('banner-link');
       if (binding) {
-        const folder = Core.bindingTarget(binding);
-        qs('banner-detail').textContent = folder
-          ? folder
-          : this.t('UI.VAULT_ROOT', '(vault root)');
+        qs('banner-detail').textContent = Core.bindingTarget(binding);
         openBtn.classList.remove('hidden');
-        linkBtn.textContent = this.t('UI.EDIT_LINK', 'Change folder');
+        linkBtn.textContent = this.t('UI.EDIT_LINK', 'Change page');
       } else {
         qs('banner-detail').textContent = this.t(
           'UI.CURRENT_UNLINKED',
-          'Not linked to an Obsidian folder yet.',
+          'Not linked to an Obsidian page yet.',
         );
         openBtn.classList.add('hidden');
         linkBtn.textContent = this.t('UI.LINK_THIS', 'Link this project');
       }
     }
 
-    renderFolderList() {
-      const root = qs('folder-list');
+    renderPageList() {
+      const root = qs('page-list');
+      if (!root || !this.canBrowse()) {
+        this.renderSelectedPage();
+        return;
+      }
       const project = this.selectedProject();
-      const visible = Core.filterFolders(this.folders, this.folderQuery, project && project.title);
-      this.renderSelectedFolder();
-      if (!this.folders.length) {
+      const visible = Core.filterPages(this.pages, this.pageQuery, project && project.title);
+      this.renderSelectedPage();
+      if (!this.pages.length) {
         root.innerHTML = `<p class="empty text-muted">${escapeHtml(
           this.t(
-            'UI.FOLDERS_EMPTY',
-            'Set the vault path and click Load folders to see every folder in the vault.',
+            'UI.PAGES_EMPTY',
+            'Set the vault path and click Load existing pages to list notes already in the vault.',
           ),
         )}</p>`;
         return;
       }
       if (!visible.length) {
         root.innerHTML = `<p class="empty text-muted">${escapeHtml(
-          this.t('UI.FOLDERS_NONE', 'No folders match this search.'),
+          this.t('UI.PAGES_NONE', 'No existing pages match this search.'),
         )}</p>`;
         return;
       }
 
       root.innerHTML = visible
-        .map((folder) => {
-          const path = folder.path || '';
-          const label = path || this.t('UI.VAULT_ROOT', '(vault root)');
-          const selected = path === this.selectedFolder ? ' selected' : '';
-          const rank = Core.rankFolder(path, project && project.title);
+        .map((page) => {
+          const path = page.path || '';
+          const selected = path === this.selectedPage ? ' selected' : '';
+          const rank = Core.rankPage(path, project && project.title);
           const match = rank >= 3 ? ' match' : '';
-          return `<button type="button" class="folder-item${selected}${match}" data-folder="${escapeHtml(
+          return `<button type="button" class="folder-item${selected}${match}" data-page="${escapeHtml(
             path,
-          )}" title="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+          )}" title="${escapeHtml(path)}">${escapeHtml(path)}</button>`;
         })
         .join('');
 
-      root.querySelectorAll('[data-folder]').forEach((button) => {
+      root.querySelectorAll('[data-page]').forEach((button) => {
         button.addEventListener('click', () => {
-          this.selectedFolder = button.getAttribute('data-folder') || '';
-          this.folderPicked = true;
-          this.renderFolderList();
+          this.selectedPage = button.getAttribute('data-page') || '';
+          this.pagePicked = true;
+          this.renderPageList();
         });
       });
-      this.renderSelectedFolder();
     }
 
-    renderSelectedFolder() {
-      const el = qs('selected-folder');
+    renderSelectedPage() {
+      const el = qs('selected-page');
       if (!el) {
         return;
       }
-      el.textContent = this.folderPicked
-        ? this.selectedFolder || this.t('UI.VAULT_ROOT', '(vault root)')
-        : this.t('UI.NO_FOLDER_SELECTED', 'No folder selected');
+      el.textContent = this.pagePicked && this.selectedPage
+        ? this.selectedPage
+        : this.t('UI.NO_PAGE_SELECTED', 'No page selected');
     }
 
     renderBindings() {
@@ -1270,7 +1609,7 @@ return folders;
         root.innerHTML = `<p class="empty text-muted">${escapeHtml(
           this.t(
             'UI.EMPTY',
-            'No links yet. Choose an existing project, pick an Obsidian folder, then click Link.',
+            'No links yet. Choose an existing project, pick an existing Obsidian page, then click Link.',
           ),
         )}</p>`;
         return;
@@ -1284,32 +1623,45 @@ return folders;
             : this.t('UI.MISSING_PROJECT', 'Missing project ({{id}})', {
                 id: binding.projectId,
               });
-          const folder = Core.bindingTarget(binding);
-          const folderLabel = folder || this.t('UI.VAULT_ROOT', '(vault root)');
+          const page = Core.bindingTarget(binding);
           const missingClass = project ? '' : ' text-muted';
           return `
             <article class="card binding" data-project-id="${escapeHtml(
               binding.projectId,
             )}">
-              <div class="binding-title${missingClass}">
-                <span class="dot"></span>
-                <span>${escapeHtml(title)}</span>
+              <div class="binding-head">
+                <div class="binding-title${missingClass}">
+                  <span class="dot"></span>
+                  <span>${escapeHtml(title)}</span>
+                </div>
+                <div class="menu-wrap">
+                  <button
+                    type="button"
+                    class="icon-btn menu-trigger"
+                    data-action="toggle-menu"
+                    aria-label="${escapeHtml(this.t('UI.MORE_ACTIONS', 'More actions'))}"
+                    title="${escapeHtml(this.t('UI.MORE_ACTIONS', 'More actions'))}"
+                  >⋮</button>
+                  <div class="menu-panel hidden" role="menu">
+                    <button type="button" data-action="open" role="menuitem">${escapeHtml(
+                      this.t('UI.OPEN', 'Open in Obsidian'),
+                    )}</button>
+                    <button type="button" data-action="edit" role="menuitem">${escapeHtml(
+                      this.t('UI.EDIT_LINK', 'Change page'),
+                    )}</button>
+                    <button type="button" data-action="copy-uri" role="menuitem">${escapeHtml(
+                      this.t('UI.COPY_URI', 'Copy URI'),
+                    )}</button>
+                    <button type="button" data-action="copy-wiki" role="menuitem">${escapeHtml(
+                      this.t('UI.COPY_WIKI', 'Copy [[wiki]]'),
+                    )}</button>
+                    <button type="button" class="danger" data-action="unlink" role="menuitem">${escapeHtml(
+                      this.t('UI.UNLINK', 'Unlink'),
+                    )}</button>
+                  </div>
+                </div>
               </div>
-              <div class="path text-muted">${escapeHtml(folderLabel)}</div>
-              <div class="actions">
-                <button type="button" data-action="open">${escapeHtml(
-                  this.t('UI.OPEN', 'Open in Obsidian'),
-                )}</button>
-                <button type="button" data-action="copy-uri">${escapeHtml(
-                  this.t('UI.COPY_URI', 'Copy URI'),
-                )}</button>
-                <button type="button" data-action="copy-wiki">${escapeHtml(
-                  this.t('UI.COPY_WIKI', 'Copy [[wiki]]'),
-                )}</button>
-                <button type="button" class="danger" data-action="unlink">${escapeHtml(
-                  this.t('UI.UNLINK', 'Unlink'),
-                )}</button>
-              </div>
+              <div class="path text-muted">${escapeHtml(page)}</div>
             </article>
           `;
         })
@@ -1317,10 +1669,35 @@ return folders;
 
       root.querySelectorAll('[data-action]').forEach((button) => {
         button.addEventListener('click', (event) => {
+          event.stopPropagation();
           const article = event.currentTarget.closest('[data-project-id]');
           const projectId = article && article.getAttribute('data-project-id');
-          this.handleBindingAction(event.currentTarget.getAttribute('data-action'), projectId);
+          const action = event.currentTarget.getAttribute('data-action');
+          if (action === 'toggle-menu') {
+            this.toggleBindingMenu(article);
+            return;
+          }
+          this.closeAllMenus();
+          this.handleBindingAction(action, projectId);
         });
+      });
+    }
+
+    toggleBindingMenu(article) {
+      if (!article) {
+        return;
+      }
+      const panel = article.querySelector('.menu-panel');
+      const wasOpen = panel && !panel.classList.contains('hidden');
+      this.closeAllMenus();
+      if (panel && !wasOpen) {
+        panel.classList.remove('hidden');
+      }
+    }
+
+    closeAllMenus() {
+      document.querySelectorAll('.menu-panel').forEach((panel) => {
+        panel.classList.add('hidden');
       });
     }
 
@@ -1331,21 +1708,23 @@ return folders;
         this.lastProjectId = projectId;
         const binding = project ? Core.getBinding(this.state, project.id) : null;
         if (binding) {
-          this.selectedFolder = Core.bindingTarget(binding);
-          this.folderPicked = true;
+          this.selectedPage = Core.bindingTarget(binding);
+          this.pagePicked = true;
+          qs('manual-page').value = this.selectedPage;
         } else {
-          this.selectedFolder = '';
-          this.folderPicked = false;
+          this.selectedPage = '';
+          this.pagePicked = false;
+          qs('manual-page').value = '';
         }
       }
-      if (project && !this.folderQuery) {
-        qs('folder-search').placeholder = this.t(
-          'UI.FOLDER_SEARCH_FOR',
-          'Search folders… (matches for "{{title}}" are listed first)',
+      if (project && !this.pageQuery) {
+        qs('page-search').placeholder = this.t(
+          'UI.PAGE_SEARCH_FOR',
+          'Search existing pages… (matches for "{{title}}" are listed first)',
           { title: project.title },
         );
       }
-      this.renderFolderList();
+      this.renderPageList();
     }
 
     prefillCurrent() {
@@ -1353,10 +1732,13 @@ return folders;
         return;
       }
       qs('project-select').value = this.context.id;
-      this.folderQuery = '';
-      qs('folder-search').value = '';
+      this.pageQuery = '';
+      qs('page-search').value = '';
       this.onProjectChange();
-      qs('folder-list').scrollIntoView({ block: 'nearest' });
+      const target = this.canBrowse() ? qs('page-list') : qs('manual-page');
+      if (target) {
+        target.scrollIntoView({ block: 'nearest' });
+      }
     }
 
     async persist(nextState) {
@@ -1372,65 +1754,74 @@ return folders;
       });
       await this.persist(next);
       this.setStatus(this.t('MSG.VAULT_SAVED', 'Vault settings saved.'), 'success');
-      if (next.vaultPath) {
-        await this.loadFolders();
+      if (this.canBrowse() && next.vaultPath) {
+        await this.loadPages();
       }
     }
 
-    async loadFolders() {
-      const vaultPath = Core.normalizeVaultRootPath(qs('vault-path').value || this.state.vaultPath);
+    async loadPages() {
+      if (!this.canBrowse()) {
+        this.setStatus(
+          this.t(
+            'MSG.DESKTOP_ONLY',
+            'Listing existing Obsidian pages needs the Super Productivity desktop app, with file access allowed for this plugin.',
+          ),
+          'error',
+        );
+        return;
+      }
+      const vaultPath = Core.normalizeVaultRootPath(
+        qs('vault-path').value || this.state.vaultPath,
+      );
       if (!vaultPath) {
         this.setStatus(
           this.t(
             'MSG.VAULT_PATH_REQUIRED',
-            'Enter the vault folder path on this computer, then load folders.',
-          ),
-          'error',
-        );
-        return;
-      }
-      if (!this.canScanVault()) {
-        this.setStatus(
-          this.t(
-            'MSG.DESKTOP_ONLY',
-            'Listing Obsidian folders needs the Super Productivity desktop app, with file access allowed for this plugin.',
+            'Enter the vault folder path on this computer, then load existing pages.',
           ),
           'error',
         );
         return;
       }
 
-      this.setStatus(this.t('MSG.LOADING_FOLDERS', 'Reading vault folders…'), 'info');
+      this.setStatus(this.t('MSG.LOADING_PAGES', 'Reading existing vault pages…'), 'info');
       try {
         const result = await PluginAPI.executeNodeScript({
-          script: Core.listVaultFoldersScript(vaultPath),
-          timeout: 15000,
+          script: Core.listVaultPagesScript(vaultPath),
+          timeout: 20000,
         });
-        const parsed = Core.parseNodeFolderResult(result);
+        const parsed = Core.parseNodePageResult(result);
         if (!parsed.ok) {
-          this.folders = [];
+          this.pages = [];
           this.setStatus(parsed.error, 'error');
-          this.renderFolderList();
+          this.renderPageList();
           return;
         }
-        this.folders = parsed.folders;
-        this.renderFolderList();
+        this.pages = parsed.pages;
+        this.renderPageList();
         this.setStatus(
-          this.t('MSG.FOLDERS_LOADED', 'Loaded {{count}} folders.', {
-            count: this.folders.length,
+          this.t('MSG.PAGES_LOADED', 'Loaded {{count}} existing pages.', {
+            count: this.pages.length,
           }),
           'success',
         );
       } catch (error) {
-        this.folders = [];
+        this.pages = [];
         this.setStatus(
           error && error.message
             ? String(error.message)
-            : this.t('MSG.FOLDERS_FAILED', 'Could not read the vault folders.'),
+            : this.t('MSG.PAGES_FAILED', 'Could not read existing vault pages.'),
           'error',
         );
-        this.renderFolderList();
+        this.renderPageList();
       }
+    }
+
+    resolveSelectedPagePath() {
+      if (this.canBrowse()) {
+        return this.pagePicked ? this.selectedPage : '';
+      }
+      return (qs('manual-page').value || '').trim();
     }
 
     async saveBinding() {
@@ -1445,46 +1836,60 @@ return folders;
         );
         return;
       }
-      if (!this.folders.length) {
+
+      const pagePath = this.resolveSelectedPagePath();
+      if (!pagePath) {
         this.setStatus(
           this.t(
-            'MSG.LOAD_FOLDERS_FIRST',
-            'Load the vault folders first, then select the folder that matches this project.',
+            'MSG.CHOOSE_PAGE',
+            'Select an existing Obsidian page (or enter its vault-relative path).',
           ),
           'error',
         );
         return;
       }
-      if (!this.folderPicked || !this.hasExplicitFolderSelection()) {
-        this.setStatus(
-          this.t('MSG.CHOOSE_FOLDER', 'Select an Obsidian folder from the list.'),
-          'error',
+
+      if (this.canBrowse() && this.pages.length) {
+        const exists = this.pages.some(
+          (page) => (page.path || '') === Core.withMarkdownExtension(pagePath),
         );
-        return;
+        if (!exists) {
+          this.setStatus(
+            this.t(
+              'MSG.PAGE_MUST_EXIST',
+              'Pick a page from the list of existing vault notes. The plugin cannot create a new Obsidian page.',
+            ),
+            'error',
+          );
+          return;
+        }
       }
 
-      const result = Core.upsertBinding(this.state, projectId, this.selectedFolder || '');
+      const result = Core.upsertBinding(this.state, projectId, pagePath);
       if (!result.ok) {
         this.setStatus(this.t('MSG.INVALID_PATH', result.message), 'error');
         return;
       }
       await this.persist(result.state);
       this.setStatus(
-        this.t('MSG.LINKED', 'Project linked to the selected Obsidian folder.'),
+        this.t('MSG.LINKED', 'Project linked to the selected Obsidian page.'),
         'success',
       );
-    }
-
-    hasExplicitFolderSelection() {
-      if (!this.folders.length) {
-        return false;
-      }
-      return this.folders.some((folder) => (folder.path || '') === (this.selectedFolder || ''));
     }
 
     async handleBindingAction(action, projectId) {
       const binding = Core.getBinding(this.state, projectId);
       if (!binding && action !== 'unlink') {
+        return;
+      }
+
+      if (action === 'edit') {
+        qs('project-select').value = projectId;
+        this.onProjectChange();
+        const target = this.canBrowse() ? qs('page-list') : qs('manual-page');
+        if (target) {
+          target.scrollIntoView({ block: 'nearest' });
+        }
         return;
       }
 
@@ -1498,9 +1903,9 @@ return folders;
         return;
       }
 
-      const folder = Core.bindingTarget(binding);
+      const page = Core.bindingTarget(binding);
       if (action === 'open') {
-        await this.openUri(Core.buildOpenUri(this.state, binding), folder);
+        await this.openUri(Core.buildOpenUri(this.state, binding), page);
         return;
       }
 
@@ -1515,7 +1920,7 @@ return folders;
       }
 
       if (action === 'copy-wiki') {
-        const wiki = folder ? Core.wikiLink(folder) : '';
+        const wiki = page ? Core.wikiLink(page) : '';
         const copied = wiki ? await Core.copyText(wiki) : false;
         this.setStatus(
           copied ? this.t('MSG.COPIED', 'Copied to clipboard.') : wiki,
@@ -1533,7 +1938,7 @@ return folders;
           htmlContent: `<p>${escapeHtml(
             this.t(
               'MSG.CONFIRM_UNLINK',
-              'Remove the Obsidian folder link for "{{title}}"? Nothing in the vault is deleted.',
+              'Remove the Obsidian page link for "{{title}}"? Nothing in the vault is deleted.',
               { title },
             ),
           )}</p>`,
@@ -1559,7 +1964,7 @@ return folders;
       await this.openUri(Core.buildOpenUri(this.state, binding), Core.bindingTarget(binding));
     }
 
-    async openUri(uri, folder) {
+    async openUri(uri, page) {
       if (!uri) {
         this.setStatus(this.t('MSG.OPEN_FAILED', 'Could not build the Obsidian URI.'), 'error');
         return;
@@ -1568,7 +1973,7 @@ return folders;
       if (result.ok) {
         this.setStatus(
           this.t('MSG.OPENING_NOTE', 'Opening {{file}} in Obsidian…', {
-            file: folder || this.t('UI.VAULT_ROOT', '(vault root)'),
+            file: page || '',
           }),
           'success',
         );
@@ -1598,6 +2003,12 @@ return folders;
       }
     }
   }
+
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.menu-panel').forEach((panel) => {
+      panel.classList.add('hidden');
+    });
+  });
 
   waitForPluginApi();
 })();

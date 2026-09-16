@@ -23,9 +23,30 @@
   }
 
   function openPanel() {
+    // Prefer the side panel when available; fall back to the full iframe view.
     if (typeof api.showIndexHtmlAsView === 'function') {
       api.showIndexHtmlAsView();
     }
+  }
+
+  async function openLinkWindow(context) {
+    const ctx =
+      context ||
+      (typeof api.getActiveWorkContext === 'function'
+        ? await api.getActiveWorkContext()
+        : null);
+
+    if (ctx && ctx.type === 'PROJECT') {
+      api.showSnack({
+        msg: t(
+          'MSG.OPENING_LINK_WINDOW',
+          'Open the Obsidian Connector panel to link "{{title}}" to an existing page.',
+          { title: ctx.title || '' },
+        ),
+        type: 'INFO',
+      });
+    }
+    openPanel();
   }
 
   async function openLinkedNote(context) {
@@ -43,7 +64,7 @@
         ),
         type: 'INFO',
       });
-      openPanel();
+      await openLinkWindow();
       return;
     }
 
@@ -53,11 +74,11 @@
       api.showSnack({
         msg: t(
           'MSG.PROJECT_NOT_LINKED',
-          'This project is not linked to an Obsidian folder yet.',
+          'This project is not linked to an Obsidian page yet.',
         ),
         type: 'INFO',
       });
-      openPanel();
+      await openLinkWindow(ctx);
       return;
     }
 
@@ -79,7 +100,7 @@
 
     api.showSnack({
       msg: t('MSG.OPENING_NOTE', 'Opening {{file}} in Obsidian…', {
-        file: Core.bindingTarget(binding) || t('UI.VAULT_ROOT', '(vault root)'),
+        file: Core.bindingTarget(binding),
       }),
       type: 'SUCCESS',
       ico: 'menu_book',
@@ -87,6 +108,22 @@
   }
 
   function boot() {
+    // Side-nav / plugin menu entry — opens the link window.
+    // Super Productivity does not yet let plugins inject into the project ⋮
+    // work-context menu; this entry plus the header button are the supported
+    // entry points (and on mobile the side-panel button appears in Panels).
+    try {
+      api.registerMenuEntry({
+        label: t('MENU.LINK_PAGE', 'Link Obsidian page…'),
+        icon: 'menu_book',
+        onClick: () => {
+          openLinkWindow();
+        },
+      });
+    } catch {
+      // Host may already add a default menu entry from the manifest.
+    }
+
     try {
       api.registerMenuEntry({
         label: t('PLUGIN.NAME', 'Obsidian Connector'),
@@ -94,7 +131,7 @@
         onClick: openPanel,
       });
     } catch {
-      // Host already added a default menu entry from the manifest.
+      // Ignore duplicate registration.
     }
 
     if (typeof api.registerConfigHandler === 'function') {
@@ -104,7 +141,7 @@
     if (typeof api.registerShortcut === 'function') {
       api.registerShortcut({
         id: 'obsidian-connector-open-note',
-        label: t('SHORTCUT.OPEN_LINKED_NOTE', 'Open linked Obsidian folder'),
+        label: t('SHORTCUT.OPEN_LINKED_NOTE', 'Open linked Obsidian page'),
         onExec: () => {
           openLinkedNote();
         },
@@ -114,8 +151,17 @@
         label: t('SHORTCUT.OPEN_PANEL', 'Open Obsidian Connector'),
         onExec: openPanel,
       });
+      api.registerShortcut({
+        id: 'obsidian-connector-link-page',
+        label: t('SHORTCUT.LINK_PAGE', 'Link project to Obsidian page'),
+        onExec: () => {
+          openLinkWindow();
+        },
+      });
     }
 
+    // Header button next to the project title actions (near the ⋮ menu).
+    // Opens the linked page when set; otherwise opens the link window.
     const headerCfg = {
       label: t('HEADER.OPEN_NOTE', 'Obsidian'),
       icon: 'menu_book',
@@ -129,8 +175,33 @@
         ...headerCfg,
         showFor: ['PROJECT'],
       });
+      // Second header action dedicated to opening the link window.
+      try {
+        api.registerWorkContextHeaderButton({
+          label: t('HEADER.LINK_PAGE', 'Link Obsidian'),
+          icon: 'link',
+          showFor: ['PROJECT'],
+          onClick: (ctx) => {
+            openLinkWindow(ctx);
+          },
+        });
+      } catch {
+        // Older hosts may only allow one work-context header button.
+      }
     } else if (typeof api.registerHeaderButton === 'function') {
       api.registerHeaderButton(headerCfg);
+    }
+
+    if (typeof api.registerSidePanelButton === 'function') {
+      try {
+        api.registerSidePanelButton({
+          label: t('PLUGIN.NAME', 'Obsidian Connector'),
+          icon: 'menu_book',
+          onClick: openPanel,
+        });
+      } catch {
+        // Manifest sidePanel may already register one.
+      }
     }
   }
 

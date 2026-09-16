@@ -14,11 +14,12 @@
         <h1 id="title">Obsidian Connector</h1>
         <p id="lede" class="lede text-muted">
           Pick an existing Super Productivity project and link it to an existing
-          folder in your Obsidian vault. Nothing new is created.
+          page in your Obsidian vault. The plugin never creates a new page.
         </p>
       </header>
 
       <p id="status" class="status" aria-live="polite"></p>
+      <p id="platform-banner" class="hint text-muted platform-banner"></p>
 
       <section id="current-banner" class="card banner hidden">
         <div>
@@ -44,25 +45,26 @@
           />
         </div>
         <p id="vault-name-hint" class="hint text-muted">
-          The name shown in Obsidian. Used only to open the folder with obsidian://
+          The name shown in Obsidian. Used only to open the page with obsidian://
         </p>
-        <div class="field">
-          <label id="vault-path-label" for="vault-path">Vault folder on this computer</label>
-          <input
-            id="vault-path"
-            type="text"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="/home/you/Obsidian/Work"
-          />
+        <div id="vault-path-block">
+          <div class="field">
+            <label id="vault-path-label" for="vault-path">Vault folder on this computer</label>
+            <input
+              id="vault-path"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="/home/you/Obsidian/Work"
+            />
+          </div>
+          <p id="vault-path-hint" class="hint text-muted">
+            Absolute path to the vault. Desktop only — used to list existing pages.
+          </p>
         </div>
-        <p id="vault-path-hint" class="hint text-muted">
-          Absolute path to the vault, e.g. /home/you/Obsidian/Work. Needed to list
-          folders. Desktop app only.
-        </p>
         <div class="row">
           <button id="save-vault" type="button" class="primary">Save</button>
-          <button id="load-folders" type="button">Load folders</button>
+          <button id="load-pages" type="button">Load existing pages</button>
         </div>
       </section>
 
@@ -76,27 +78,47 @@
           Only projects that already exist in Super Productivity are listed. This
           plugin never creates a project.
         </p>
-        <div class="field">
-          <label id="folder-label" for="folder-search">Obsidian folder</label>
-          <input
-            id="folder-search"
-            type="search"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="Search folders…"
-          />
+
+        <div id="desktop-page-picker">
+          <div class="field">
+            <label id="page-label" for="page-search">Existing Obsidian page</label>
+            <input
+              id="page-search"
+              type="search"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Search existing pages…"
+            />
+          </div>
+          <p id="page-hint" class="hint text-muted">
+            Choose a page that already exists in the vault. Nothing new is created.
+          </p>
+          <div id="page-list" class="folder-list" role="listbox" aria-label="Existing Obsidian pages"></div>
         </div>
-        <p id="folder-hint" class="hint text-muted">
-          Choose the vault folder that matches this project. Load folders after
-          setting the vault path.
-        </p>
-        <div id="folder-list" class="folder-list" role="listbox" aria-label="Obsidian folders"></div>
+
+        <div id="mobile-page-entry" class="hidden">
+          <div class="field">
+            <label id="manual-page-label" for="manual-page">Existing page path</label>
+            <input
+              id="manual-page"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Projects/Website.md"
+            />
+          </div>
+          <p id="manual-page-hint" class="hint text-muted">
+            Enter the vault-relative path of a page that already exists. On mobile,
+            browsing the vault disk is unavailable — type the path of an existing note.
+          </p>
+        </div>
+
         <p class="selected-folder">
-          <span id="selected-folder-label">Selected folder</span>:
-          <code id="selected-folder">No folder selected</code>
+          <span id="selected-page-label">Selected page</span>:
+          <code id="selected-page">No page selected</code>
         </p>
         <div class="row">
-          <button id="save-binding" type="button" class="primary">Link to selected folder</button>
+          <button id="save-binding" type="button" class="primary">Link to selected page</button>
         </div>
       </section>
 

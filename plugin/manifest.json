@@ -1,10 +1,10 @@
 {
   "id": "obsidian-connector",
   "name": "Obsidian Connector",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "manifestVersion": 1,
   "minSupVersion": "14.0.0",
-  "description": "Link Super Productivity projects to existing folders in an Obsidian vault.",
+  "description": "Link Super Productivity projects to existing Obsidian pages. Works on desktop and mobile; never creates a new page.",
   "author": "Luca",
   "homepage": "https://github.com/ItalianJoker/ObsidianConnector",
   "icon": "icon.svg",
@@ -27,7 +27,7 @@
     "nodeExecution"
   ],
   "nodeScriptConfig": {
-    "timeout": 15000
+    "timeout": 20000
   },
   "i18n": {
     "languages": ["en"]

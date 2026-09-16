@@ -2,6 +2,20 @@
 
 All notable changes to Obsidian Connector are documented in this file.
 
+## [1.2.0] - 2026-09-16
+
+### Changed
+
+- Link to **existing Obsidian pages** only. The plugin never creates a new Obsidian page (`obsidian://new` is unused) and never creates a Super Productivity project
+- Desktop lists existing `.md` notes from the vault; mobile/web use a vault-relative path field for an existing page
+- Opening still uses `obsidian://open` on desktop and mobile
+
+### Added
+
+- Mobile-friendly side panel layout and touch targets
+- Plugin menu entry **Link Obsidian page…** and project header **Link Obsidian** to open the link window
+- **⋮** actions menu on each linked project inside the panel (Open, Change page, Copy URI, Copy wiki, Unlink)
+
 ## [1.1.0] - 2026-09-16
 
 ### Changed
@@ -40,6 +54,7 @@ First release.
 - Synced bindings via `persistDataSynced`
 - English UI
 
+[1.2.0]: https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.2.0
 [1.1.0]: https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.1.0
 [1.0.1]: https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.0.1
 [1.0.0]: https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.0.0
