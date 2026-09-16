@@ -1,6 +1,9 @@
 /**
- * Shared, DOM-light helpers for the Obsidian Connector plugin.
- * Loaded in Node tests (CommonJS) and concatenated into plugin.js / index.html.
+ * Shared helpers for the Obsidian Connector plugin.
+ * Used by Node tests (CommonJS) and concatenated into plugin.js / index.html.
+ *
+ * Linking model: existing Super Productivity project → existing Obsidian page.
+ * Opening uses obsidian://open only. This module does not create pages or projects.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -12,8 +15,8 @@
   'use strict';
 
   const STORAGE_VERSION = 3;
+  /** Kept in persisted state for older installs; not used by the page-link UI. */
   const DEFAULT_FOLDER = 'Projects';
-  const ILLEGAL_NAME_CHARS = /[\\/:*?"<>|]/g;
   const SKIP_VAULT_DIRS = ['.obsidian', '.trash', '.git', 'node_modules'];
 
   function createEmptyState() {
@@ -41,6 +44,7 @@
     return platform === 'android' || platform === 'ios';
   }
 
+  /** True when the host can list vault files via executeNodeScript (desktop only). */
   function canBrowseVault(api) {
     return isDesktopPlatform(api) && typeof (api && api.executeNodeScript) === 'function';
   }
@@ -75,9 +79,7 @@
         : DEFAULT_FOLDER;
 
     const bindings = Array.isArray(parsed.bindings)
-      ? parsed.bindings
-          .map(normalizeBinding)
-          .filter(Boolean)
+      ? parsed.bindings.map(normalizeBinding).filter(Boolean)
       : [];
 
     const byProject = new Map();
@@ -137,8 +139,8 @@
   }
 
   /**
-   * Resolve the vault-relative Obsidian target for a binding.
-   * Prefers an existing note path; keeps older folder-only bindings openable.
+   * Vault-relative target for a binding.
+   * Prefers an existing note path; keeps legacy folder-only bindings openable.
    */
   function notePathFromBinding(binding) {
     if (!isPlainObject(binding)) {
@@ -185,21 +187,7 @@
     return target == null ? '' : target;
   }
 
-  // Backwards-compatible alias used by older tests/call sites.
-  function folderPathFromBinding(binding) {
-    const target = notePathFromBinding(binding);
-    if (target == null) {
-      return null;
-    }
-    if (isNoteTarget(target)) {
-      return parentFolderOf(target);
-    }
-    return target;
-  }
-
-  /**
-   * Absolute path to the vault folder on disk (desktop). Empty if unset.
-   */
+  /** Absolute path to the vault folder on disk (desktop). Empty if unset. */
   function normalizeVaultRootPath(filePath) {
     if (typeof filePath !== 'string') {
       return '';
@@ -225,7 +213,7 @@
 
   /**
    * Vault-relative path: forward slashes, no leading slash, no `..` segments.
-   * Keeps a trailing `.md` if the user provided one.
+   * Keeps a trailing `.md` when present.
    */
   function normalizeVaultFilePath(filePath) {
     if (typeof filePath !== 'string') {
@@ -257,13 +245,13 @@
     if (!normalized) {
       return {
         ok: false,
-        message:
-          'Choose an existing page inside the vault (no absolute paths or ..).',
+        message: 'Choose an existing page inside the vault (no absolute paths or ..).',
       };
     }
     return { ok: true, path: normalized };
   }
 
+  /** Normalize and require a vault-relative note path (adds .md when missing). */
   function validateExistingNotePath(filePath) {
     const validated = validateFilePath(filePath);
     if (!validated.ok) {
@@ -282,23 +270,6 @@
       return '';
     }
     return /\.md$/i.test(normalized) ? normalized : `${normalized}.md`;
-  }
-
-  function sanitizeNoteTitle(title) {
-    const cleaned = String(title || '')
-      .trim()
-      .replace(ILLEGAL_NAME_CHARS, '-')
-      .replace(/\s+/g, ' ')
-      .replace(/-+/g, '-')
-      .replace(/^\.+$/, '')
-      .replace(/[. ]+$/g, '');
-    return cleaned || 'Untitled';
-  }
-
-  function suggestFilePath(projectTitle, defaultFolder) {
-    const folder = normalizeVaultFilePath(defaultFolder || DEFAULT_FOLDER);
-    const name = `${sanitizeNoteTitle(projectTitle)}.md`;
-    return folder ? `${folder}/${name}` : name;
   }
 
   function wikiLink(filePath) {
@@ -320,6 +291,7 @@
     return parts.join('&');
   }
 
+  /** Build obsidian://open for an existing binding. Never uses obsidian://new. */
   function buildOpenUri(state, binding) {
     if (!binding) {
       return null;
@@ -332,38 +304,6 @@
     })}`;
   }
 
-  function noteTemplate({ projectId, projectTitle }) {
-    const title = projectTitle || 'Untitled project';
-    return [
-      '---',
-      `super-productivity-id: ${projectId || ''}`,
-      `super-productivity-project: ${title}`,
-      '---',
-      '',
-      `# ${title}`,
-      '',
-      'This note is linked to a Super Productivity project.',
-      '',
-    ].join('\n');
-  }
-
-  function buildNewUri(state, binding, project) {
-    const filePath = normalizeVaultFilePath(binding && binding.filePath);
-    if (!filePath) {
-      return null;
-    }
-    const vaultName = (state && state.vaultName) || '';
-    const content = noteTemplate({
-      projectId: binding.projectId || (project && project.id),
-      projectTitle: (project && project.title) || stripMarkdownExtension(filePath),
-    });
-    return `obsidian://new?${queryString({
-      vault: vaultName,
-      file: stripMarkdownExtension(filePath),
-      content,
-    })}`;
-  }
-
   function getBinding(state, projectId) {
     if (!state || !projectId) {
       return null;
@@ -371,16 +311,16 @@
     return state.bindings.find((binding) => binding.projectId === projectId) || null;
   }
 
-  function asNotePath(filePath) {
-    return validateExistingNotePath(filePath);
-  }
-
   function upsertBinding(state, projectId, filePath, now) {
     const next = parseState(state);
     if (!projectId) {
-      return { ok: false, state: next, message: 'Choose an existing Super Productivity project.' };
+      return {
+        ok: false,
+        state: next,
+        message: 'Choose an existing Super Productivity project.',
+      };
     }
-    const validated = asNotePath(filePath);
+    const validated = validateExistingNotePath(filePath);
     if (!validated.ok) {
       return { ok: false, state: next, message: validated.message };
     }
@@ -421,11 +361,11 @@
     return next;
   }
 
-  function rankFolder(folderPath, projectTitle) {
+  function rankPath(pathValue, projectTitle) {
     if (!projectTitle) {
       return 0;
     }
-    const hay = String(folderPath || '').toLowerCase();
+    const hay = String(pathValue || '').toLowerCase();
     const title = String(projectTitle).toLowerCase().trim();
     if (!title) {
       return 0;
@@ -448,39 +388,11 @@
     return hits ? 1 + hits / words.length : 0;
   }
 
-  function filterFolders(folders, query, projectTitle) {
-    const list = Array.isArray(folders) ? folders.slice() : [];
-    const needle = String(query || '').trim().toLowerCase();
-    const filtered = needle
-      ? list.filter((folder) => {
-          const path = typeof folder === 'string' ? folder : folder && folder.path;
-          const name = typeof folder === 'string' ? folder : folder && folder.name;
-          return (
-            String(path || '')
-              .toLowerCase()
-              .includes(needle) ||
-            String(name || '')
-              .toLowerCase()
-              .includes(needle)
-          );
-        })
-      : list;
-    filtered.sort((a, b) => {
-      const pathA = typeof a === 'string' ? a : a.path || '';
-      const pathB = typeof b === 'string' ? b : b.path || '';
-      const rank = rankFolder(pathB, projectTitle) - rankFolder(pathA, projectTitle);
-      if (rank !== 0) {
-        return rank;
-      }
-      return pathA.localeCompare(pathB);
-    });
-    return filtered;
-  }
-
   function rankPage(pagePath, projectTitle) {
-    return rankFolder(stripMarkdownExtension(pagePath), projectTitle);
+    return rankPath(stripMarkdownExtension(pagePath), projectTitle);
   }
 
+  /** Filter/search existing pages and rank likely project-name matches first. */
   function filterPages(pages, query, projectTitle) {
     const list = Array.isArray(pages) ? pages.slice() : [];
     const needle = String(query || '').trim().toLowerCase();
@@ -510,51 +422,10 @@
     return filtered;
   }
 
-  function listVaultFoldersScript(vaultRoot) {
-    const root = normalizeVaultRootPath(vaultRoot);
-    return `
-const fs = require('fs');
-const path = require('path');
-const root = path.resolve(${JSON.stringify(root)});
-if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
-  throw new Error('Vault folder not found');
-}
-const skip = new Set(${JSON.stringify(SKIP_VAULT_DIRS)});
-const folders = [{ path: '', name: '(vault root)' }];
-function walk(dir, rel, depth) {
-  if (depth > 8 || folders.length >= 1500) {
-    return;
-  }
-  let names;
-  try {
-    names = fs.readdirSync(dir);
-  } catch (e) {
-    return;
-  }
-  for (const name of names) {
-    if (!name || name.charAt(0) === '.' || skip.has(name)) {
-      continue;
-    }
-    const full = path.join(dir, name);
-    let st;
-    try {
-      st = fs.statSync(full);
-    } catch (e) {
-      continue;
-    }
-    if (!st.isDirectory()) {
-      continue;
-    }
-    const relative = rel ? rel + '/' + name : name;
-    folders.push({ path: relative.replace(/\\\\/g, '/'), name: name });
-    walk(full, relative, depth + 1);
-  }
-}
-walk(root, '', 0);
-return folders;
-`;
-  }
-
+  /**
+   * Node script string for executeNodeScript: list existing .md pages under the vault.
+   * Does not create files.
+   */
   function listVaultPagesScript(vaultRoot) {
     const root = normalizeVaultRootPath(vaultRoot);
     return `
@@ -607,24 +478,24 @@ return pages;
 `;
   }
 
-  function parseNodeFolderResult(result) {
+  /** Parse executeNodeScript results into { ok, pages, error }. */
+  function parseNodePageResult(result) {
     if (!result || result.success === false) {
       const error =
         (result && result.error && result.error.message) ||
         (result && result.error) ||
         'Could not read the vault folder.';
-      return { ok: false, folders: [], pages: [], error: String(error) };
+      return { ok: false, pages: [], error: String(error) };
     }
     const raw = result.result;
     if (!Array.isArray(raw)) {
       return {
         ok: false,
-        folders: [],
         pages: [],
-        error: 'Unexpected list from the desktop app.',
+        error: 'Unexpected page list from the desktop app.',
       };
     }
-    const folders = [];
+
     const pages = [];
     for (const item of raw) {
       let pathValue = '';
@@ -641,42 +512,25 @@ return pages;
       } else {
         continue;
       }
-      if (/\.md$/i.test(pathValue) || /\.md$/i.test(name)) {
-        const notePath = withMarkdownExtension(pathValue || name);
-        pages.push({
-          path: notePath,
-          name: stripMarkdownExtension(name || notePath.split('/').pop() || notePath),
-        });
-      } else {
-        folders.push({
-          path: pathValue,
-          name: name || pathValue.split('/').pop() || '(vault root)',
-        });
+      if (!pathValue && !name) {
+        continue;
       }
+      const notePath = withMarkdownExtension(pathValue || name);
+      if (!notePath) {
+        continue;
+      }
+      pages.push({
+        path: notePath,
+        name: stripMarkdownExtension(name || notePath.split('/').pop() || notePath),
+      });
     }
-    return { ok: true, folders, pages, error: '' };
-  }
-
-  function parseNodePageResult(result) {
-    const parsed = parseNodeFolderResult(result);
-    if (!parsed.ok) {
-      return { ok: false, pages: [], error: parsed.error };
-    }
-    if (parsed.pages.length) {
-      return { ok: true, pages: parsed.pages, error: '' };
-    }
-    // Some hosts may return plain note path strings without .md in name.
-    const pages = (parsed.folders || [])
-      .filter((item) => item && item.path)
-      .map((item) => ({
-        path: withMarkdownExtension(item.path),
-        name: stripMarkdownExtension(item.name || item.path),
-      }));
     return { ok: true, pages, error: '' };
   }
 
   function visibleProjects(projects) {
-    return (projects || []).filter((project) => project && !project.isArchived && !project.isHiddenFromMenu);
+    return (projects || []).filter(
+      (project) => project && !project.isArchived && !project.isHiddenFromMenu,
+    );
   }
 
   function openExternalUri(uri) {
@@ -717,7 +571,11 @@ return pages;
       return false;
     }
     const value = String(text);
-    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+    if (
+      typeof navigator !== 'undefined' &&
+      navigator.clipboard &&
+      navigator.clipboard.writeText
+    ) {
       try {
         await navigator.clipboard.writeText(value);
         return true;
@@ -761,14 +619,13 @@ return pages;
     try {
       if (api && typeof api.translate === 'function') {
         const translated = api.translate(key, params);
-        // Super Productivity's iframe translate() can return a Promise.
-        // Never write that into the DOM — it becomes "[object Promise]".
+        // iframe translate() can return a Promise — never write that into the DOM.
         if (typeof translated === 'string' && translated && translated !== key) {
           return interpolate(translated, params);
         }
       }
     } catch {
-      // fall through to the English fallback
+      // English fallback
     }
     return interpolate(fallback || key, params);
   }
@@ -786,27 +643,18 @@ return pages;
     validateExistingNotePath,
     stripMarkdownExtension,
     withMarkdownExtension,
-    sanitizeNoteTitle,
-    suggestFilePath,
     wikiLink,
     buildOpenUri,
-    buildNewUri,
-    noteTemplate,
     getBinding,
     bindingTarget,
     notePathFromBinding,
-    asNotePath,
     upsertBinding,
     removeBinding,
     updateVaultSettings,
     visibleProjects,
-    filterFolders,
     filterPages,
-    rankFolder,
     rankPage,
-    listVaultFoldersScript,
     listVaultPagesScript,
-    parseNodeFolderResult,
     parseNodePageResult,
     getPlatform,
     isDesktopPlatform,

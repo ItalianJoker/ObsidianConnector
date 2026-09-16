@@ -1,4 +1,7 @@
-/* Host-side Super Productivity plugin. Concatenated after core.js. */
+/* Host-side Super Productivity plugin. Concatenated after core.js into plugin.js.
+ * Registers menu / header / side-panel entry points that open the link panel
+ * or an existing linked page via obsidian://open.
+ */
 (function () {
   'use strict';
 
@@ -23,12 +26,12 @@
   }
 
   function openPanel() {
-    // Prefer the side panel when available; fall back to the full iframe view.
     if (typeof api.showIndexHtmlAsView === 'function') {
       api.showIndexHtmlAsView();
     }
   }
 
+  /** Open the connector panel so the user can pick an existing Obsidian page. */
   async function openLinkWindow(context) {
     const ctx =
       context ||
@@ -49,6 +52,7 @@
     openPanel();
   }
 
+  /** Open the linked page, or the link panel when the project is not linked yet. */
   async function openLinkedNote(context) {
     const ctx =
       context ||
@@ -108,10 +112,8 @@
   }
 
   function boot() {
-    // Side-nav / plugin menu entry — opens the link window.
-    // Super Productivity does not yet let plugins inject into the project ⋮
-    // work-context menu; this entry plus the header button are the supported
-    // entry points (and on mobile the side-panel button appears in Panels).
+    // SP cannot inject into the project ⋮ work-context menu yet.
+    // Supported entry points: plugin menu, header buttons, side panel / Panels.
     try {
       api.registerMenuEntry({
         label: t('MENU.LINK_PAGE', 'Link Obsidian page…'),
@@ -160,8 +162,6 @@
       });
     }
 
-    // Header button next to the project title actions (near the ⋮ menu).
-    // Opens the linked page when set; otherwise opens the link window.
     const headerCfg = {
       label: t('HEADER.OPEN_NOTE', 'Obsidian'),
       icon: 'menu_book',
@@ -175,7 +175,6 @@
         ...headerCfg,
         showFor: ['PROJECT'],
       });
-      // Second header action dedicated to opening the link window.
       try {
         api.registerWorkContextHeaderButton({
           label: t('HEADER.LINK_PAGE', 'Link Obsidian'),

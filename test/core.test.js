@@ -99,12 +99,11 @@ describe('obsidian URIs', () => {
     assert.equal(uri, 'obsidian://open?vault=My%20Vault&file=Work%2FElmec');
   });
 
-  it('never requires obsidian://new for linking', () => {
-    assert.equal(typeof Core.buildNewUri, 'function');
-    // Linking flow uses open only; new remains unused by the UI.
+  it('opens existing pages with obsidian://open only', () => {
     const open = Core.buildOpenUri({ vaultName: 'Work' }, { filePath: 'A.md' });
     assert.match(open, /^obsidian:\/\/open\?/);
     assert.doesNotMatch(open, /obsidian:\/\/new/);
+    assert.equal(typeof Core.buildNewUri, 'undefined');
   });
 
   it('omits an empty vault name', () => {

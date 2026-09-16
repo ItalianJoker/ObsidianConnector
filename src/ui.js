@@ -1,4 +1,7 @@
-/* Iframe UI. Concatenated after core.js inside index.html. */
+/* Iframe UI for Obsidian Connector. Concatenated after core.js inside index.html.
+ * Desktop: browse existing .md pages. Mobile/web: type an existing vault-relative path.
+ * Never creates Obsidian pages or Super Productivity projects.
+ */
 (function () {
   'use strict';
 
@@ -48,10 +51,6 @@
 
     canBrowse() {
       return Core.canBrowseVault(PluginAPI);
-    }
-
-    isMobile() {
-      return Core.isMobilePlatform(PluginAPI);
     }
 
     async init() {
@@ -320,7 +319,7 @@
           const selected = path === this.selectedPage ? ' selected' : '';
           const rank = Core.rankPage(path, project && project.title);
           const match = rank >= 3 ? ' match' : '';
-          return `<button type="button" class="folder-item${selected}${match}" data-page="${escapeHtml(
+          return `<button type="button" class="page-item${selected}${match}" data-page="${escapeHtml(
             path,
           )}" title="${escapeHtml(path)}">${escapeHtml(path)}</button>`;
         })
