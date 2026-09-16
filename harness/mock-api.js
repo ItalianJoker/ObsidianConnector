@@ -8,7 +8,18 @@
   const projects = [
     { id: 'p-website', title: 'Website', theme: { primary: '#5b7fff' }, taskIds: [], backlogTaskIds: [] },
     { id: 'p-thesis', title: 'Thesis', theme: {}, taskIds: [], backlogTaskIds: [] },
+    { id: 'p-elmec', title: 'Elmec', theme: {}, taskIds: [], backlogTaskIds: [] },
     { id: 'p-inbox', title: 'Inbox', theme: {}, taskIds: [], backlogTaskIds: [] },
+  ];
+
+  const vaultFolders = [
+    { path: '', name: '(vault root)' },
+    { path: 'Personal', name: 'Personal' },
+    { path: 'Projects', name: 'Projects' },
+    { path: 'Projects/Thesis', name: 'Thesis' },
+    { path: 'Projects/Website', name: 'Website' },
+    { path: 'Work', name: 'Work' },
+    { path: 'Work/Elmec', name: 'Elmec' },
   ];
 
   let context = {
@@ -22,6 +33,7 @@
     opened,
     snacks,
     projects,
+    vaultFolders,
     get context() {
       return context;
     },
@@ -43,7 +55,7 @@
     cfg: {
       theme: 'light',
       appVersion: '18.0.0',
-      platform: 'web',
+      platform: 'desktop',
       isDev: true,
       lang: { code: 'en' },
     },
@@ -70,6 +82,9 @@
     },
     async loadSyncedData() {
       return localStorage.getItem(storeKey);
+    },
+    async executeNodeScript() {
+      return { success: true, result: vaultFolders.slice() };
     },
     showSnack(cfg) {
       snacks.push(cfg);

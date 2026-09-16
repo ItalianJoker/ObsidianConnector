@@ -11,14 +11,16 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const STORAGE_VERSION = 1;
+  const STORAGE_VERSION = 2;
   const DEFAULT_FOLDER = 'Projects';
   const ILLEGAL_NAME_CHARS = /[\\/:*?"<>|]/g;
+  const SKIP_VAULT_DIRS = ['.obsidian', '.trash', '.git', 'node_modules'];
 
   function createEmptyState() {
     return {
       version: STORAGE_VERSION,
       vaultName: '',
+      vaultPath: '',
       defaultFolder: DEFAULT_FOLDER,
       bindings: [],
     };
@@ -47,6 +49,7 @@
     }
 
     const vaultName = typeof parsed.vaultName === 'string' ? parsed.vaultName.trim() : '';
+    const vaultPath = normalizeVaultRootPath(parsed.vaultPath);
     const defaultFolder =
       typeof parsed.defaultFolder === 'string' && parsed.defaultFolder.trim()
         ? normalizeVaultFilePath(parsed.defaultFolder)
@@ -66,6 +69,7 @@
     return {
       version: STORAGE_VERSION,
       vaultName,
+      vaultPath,
       defaultFolder,
       bindings: Array.from(byProject.values()),
     };
@@ -79,8 +83,8 @@
     if (!projectId) {
       return null;
     }
-    const filePath = normalizeVaultFilePath(binding.filePath);
-    if (!filePath) {
+    const folderPath = folderPathFromBinding(binding);
+    if (folderPath == null) {
       return null;
     }
     const createdAt =
@@ -91,7 +95,65 @@
       typeof binding.updatedAt === 'number' && Number.isFinite(binding.updatedAt)
         ? binding.updatedAt
         : createdAt;
-    return { projectId, filePath, createdAt, updatedAt };
+    return {
+      projectId,
+      folderPath,
+      filePath: folderPath,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  function folderPathFromBinding(binding) {
+    const raw =
+      typeof binding.folderPath === 'string'
+        ? binding.folderPath
+        : typeof binding.filePath === 'string'
+          ? binding.filePath
+          : null;
+    if (raw == null) {
+      return null;
+    }
+    const filePath = normalizeVaultFilePath(raw);
+    if (raw.trim() && !filePath) {
+      return null;
+    }
+    if (/\.md$/i.test(filePath)) {
+      const parts = filePath.split('/');
+      parts.pop();
+      return parts.join('/');
+    }
+    return filePath;
+  }
+
+  function bindingTarget(binding) {
+    if (!binding) {
+      return '';
+    }
+    const migrated = folderPathFromBinding(binding);
+    return migrated == null ? '' : migrated;
+  }
+
+  /**
+   * Absolute path to the vault folder on disk (desktop). Empty if unset.
+   */
+  function normalizeVaultRootPath(filePath) {
+    if (typeof filePath !== 'string') {
+      return '';
+    }
+    let path = filePath.trim().replace(/\\/g, '/');
+    if (!path) {
+      return '';
+    }
+    if (path.startsWith('//')) {
+      return '';
+    }
+    const isWindows = /^[a-zA-Z]:\//.test(path);
+    const isPosix = path.startsWith('/');
+    if (!isWindows && !isPosix) {
+      return '';
+    }
+    return path.replace(/\/+$/, '');
   }
 
   function serializeState(state) {
@@ -133,7 +195,7 @@
       return {
         ok: false,
         message:
-          'Enter a vault-relative path such as Projects/My note.md (no absolute paths or ..).',
+          'Choose an existing folder inside the vault (no absolute paths or ..).',
       };
     }
     return { ok: true, path: normalized };
@@ -188,14 +250,14 @@
   }
 
   function buildOpenUri(state, binding) {
-    const filePath = normalizeVaultFilePath(binding && binding.filePath);
-    if (!filePath) {
+    if (!binding) {
       return null;
     }
+    const target = bindingTarget(binding);
     const vaultName = (state && state.vaultName) || '';
     return `obsidian://open?${queryString({
       vault: vaultName,
-      file: stripMarkdownExtension(filePath),
+      file: stripMarkdownExtension(target),
     })}`;
   }
 
@@ -238,23 +300,45 @@
     return state.bindings.find((binding) => binding.projectId === projectId) || null;
   }
 
-  function upsertBinding(state, projectId, filePath, now) {
-    const next = parseState(state);
-    const validated = validateFilePath(filePath);
-    if (!projectId || !validated.ok) {
-      return { ok: false, state: next, message: validated.message || 'Missing project.' };
+  function asFolderPath(folderPath) {
+    if (folderPath == null || String(folderPath).trim() === '') {
+      return { ok: true, path: '' };
     }
+    const validated = validateFilePath(folderPath);
+    if (!validated.ok) {
+      return validated;
+    }
+    let path = validated.path;
+    if (/\.md$/i.test(path)) {
+      const parts = path.split('/');
+      parts.pop();
+      path = parts.join('/');
+    }
+    return { ok: true, path };
+  }
+
+  function upsertBinding(state, projectId, folderPath, now) {
+    const next = parseState(state);
+    if (!projectId) {
+      return { ok: false, state: next, message: 'Choose an existing Super Productivity project.' };
+    }
+    const validated = asFolderPath(folderPath);
+    if (!validated.ok) {
+      return { ok: false, state: next, message: validated.message };
+    }
+    const path = validated.path;
     const timestamp = typeof now === 'number' ? now : Date.now();
     const existing = getBinding(next, projectId);
     const binding = {
       projectId,
-      filePath: validated.path,
+      folderPath: path,
+      filePath: path,
       createdAt: existing ? existing.createdAt : timestamp,
       updatedAt: timestamp,
     };
     next.bindings = next.bindings.filter((item) => item.projectId !== projectId);
     next.bindings.push(binding);
-    next.bindings.sort((a, b) => a.filePath.localeCompare(b.filePath));
+    next.bindings.sort((a, b) => a.folderPath.localeCompare(b.folderPath));
     return { ok: true, state: next, binding };
   }
 
@@ -264,16 +348,148 @@
     return next;
   }
 
-  function updateVaultSettings(state, { vaultName, defaultFolder }) {
+  function updateVaultSettings(state, { vaultName, vaultPath, defaultFolder }) {
     const next = parseState(state);
     if (typeof vaultName === 'string') {
       next.vaultName = vaultName.trim();
+    }
+    if (typeof vaultPath === 'string') {
+      next.vaultPath = normalizeVaultRootPath(vaultPath);
     }
     if (typeof defaultFolder === 'string') {
       const folder = normalizeVaultFilePath(defaultFolder);
       next.defaultFolder = folder || DEFAULT_FOLDER;
     }
     return next;
+  }
+
+  function rankFolder(folderPath, projectTitle) {
+    if (!projectTitle) {
+      return 0;
+    }
+    const hay = String(folderPath || '').toLowerCase();
+    const title = String(projectTitle).toLowerCase().trim();
+    if (!title) {
+      return 0;
+    }
+    const leaf = hay.split('/').pop() || hay;
+    if (leaf === title || hay === title) {
+      return 5;
+    }
+    if (leaf.includes(title) || hay.endsWith('/' + title)) {
+      return 4;
+    }
+    if (hay.includes(title)) {
+      return 3;
+    }
+    const words = title.split(/[^a-z0-9]+/i).filter((word) => word.length > 2);
+    if (!words.length) {
+      return 0;
+    }
+    const hits = words.filter((word) => hay.includes(word)).length;
+    return hits ? 1 + hits / words.length : 0;
+  }
+
+  function filterFolders(folders, query, projectTitle) {
+    const list = Array.isArray(folders) ? folders.slice() : [];
+    const needle = String(query || '').trim().toLowerCase();
+    const filtered = needle
+      ? list.filter((folder) => {
+          const path = typeof folder === 'string' ? folder : folder && folder.path;
+          const name = typeof folder === 'string' ? folder : folder && folder.name;
+          return (
+            String(path || '')
+              .toLowerCase()
+              .includes(needle) ||
+            String(name || '')
+              .toLowerCase()
+              .includes(needle)
+          );
+        })
+      : list;
+    filtered.sort((a, b) => {
+      const pathA = typeof a === 'string' ? a : a.path || '';
+      const pathB = typeof b === 'string' ? b : b.path || '';
+      const rank = rankFolder(pathB, projectTitle) - rankFolder(pathA, projectTitle);
+      if (rank !== 0) {
+        return rank;
+      }
+      return pathA.localeCompare(pathB);
+    });
+    return filtered;
+  }
+
+  function listVaultFoldersScript(vaultRoot) {
+    const root = normalizeVaultRootPath(vaultRoot);
+    return `
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(${JSON.stringify(root)});
+if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+  throw new Error('Vault folder not found');
+}
+const skip = new Set(${JSON.stringify(SKIP_VAULT_DIRS)});
+const folders = [{ path: '', name: '(vault root)' }];
+function walk(dir, rel, depth) {
+  if (depth > 8 || folders.length >= 1500) {
+    return;
+  }
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch (e) {
+    return;
+  }
+  for (const name of names) {
+    if (!name || name.charAt(0) === '.' || skip.has(name)) {
+      continue;
+    }
+    const full = path.join(dir, name);
+    let st;
+    try {
+      st = fs.statSync(full);
+    } catch (e) {
+      continue;
+    }
+    if (!st.isDirectory()) {
+      continue;
+    }
+    const relative = rel ? rel + '/' + name : name;
+    folders.push({ path: relative.replace(/\\\\/g, '/'), name: name });
+    walk(full, relative, depth + 1);
+  }
+}
+walk(root, '', 0);
+return folders;
+`;
+  }
+
+  function parseNodeFolderResult(result) {
+    if (!result || result.success === false) {
+      const error =
+        (result && result.error && result.error.message) ||
+        (result && result.error) ||
+        'Could not read the vault folder.';
+      return { ok: false, folders: [], error: String(error) };
+    }
+    const raw = result.result;
+    if (!Array.isArray(raw)) {
+      return { ok: false, folders: [], error: 'Unexpected folder list from the desktop app.' };
+    }
+    const folders = raw
+      .map((item) => {
+        if (typeof item === 'string') {
+          return { path: normalizeVaultFilePath(item), name: item.split('/').pop() || item };
+        }
+        if (item && typeof item === 'object') {
+          const folderPath = normalizeVaultFilePath(item.path || '');
+          const name = typeof item.name === 'string' && item.name ? item.name : folderPath.split('/').pop() || '(vault root)';
+          return { path: folderPath, name };
+        }
+        return null;
+      })
+      .filter(Boolean);
+    return { ok: true, folders, error: '' };
   }
 
   function visibleProjects(projects) {
@@ -377,10 +593,12 @@
   return {
     STORAGE_VERSION,
     DEFAULT_FOLDER,
+    SKIP_VAULT_DIRS,
     createEmptyState,
     parseState,
     serializeState,
     normalizeVaultFilePath,
+    normalizeVaultRootPath,
     validateFilePath,
     stripMarkdownExtension,
     withMarkdownExtension,
@@ -391,10 +609,16 @@
     buildNewUri,
     noteTemplate,
     getBinding,
+    bindingTarget,
+    asFolderPath,
     upsertBinding,
     removeBinding,
     updateVaultSettings,
     visibleProjects,
+    filterFolders,
+    rankFolder,
+    listVaultFoldersScript,
+    parseNodeFolderResult,
     openExternalUri,
     copyText,
     t,

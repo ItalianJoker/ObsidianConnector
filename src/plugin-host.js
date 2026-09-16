@@ -53,7 +53,7 @@
       api.showSnack({
         msg: t(
           'MSG.PROJECT_NOT_LINKED',
-          'This project is not linked to an Obsidian file yet.',
+          'This project is not linked to an Obsidian folder yet.',
         ),
         type: 'INFO',
       });
@@ -79,7 +79,7 @@
 
     api.showSnack({
       msg: t('MSG.OPENING_NOTE', 'Opening {{file}} in Obsidian…', {
-        file: binding.filePath,
+        file: Core.bindingTarget(binding) || t('UI.VAULT_ROOT', '(vault root)'),
       }),
       type: 'SUCCESS',
       ico: 'menu_book',
@@ -104,7 +104,7 @@
     if (typeof api.registerShortcut === 'function') {
       api.registerShortcut({
         id: 'obsidian-connector-open-note',
-        label: t('SHORTCUT.OPEN_LINKED_NOTE', 'Open linked Obsidian note'),
+        label: t('SHORTCUT.OPEN_LINKED_NOTE', 'Open linked Obsidian folder'),
         onExec: () => {
           openLinkedNote();
         },

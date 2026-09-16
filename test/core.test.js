@@ -1,5 +1,8 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const Core = require('../src/core.js');
 
 describe('parseState', () => {
@@ -12,17 +15,27 @@ describe('parseState', () => {
   it('keeps vault settings and drops duplicate project bindings', () => {
     const state = Core.parseState({
       vaultName: '  Work  ',
+      vaultPath: '/home/you/Obsidian/Work/',
       defaultFolder: '\\Notes\\Projects\\',
       bindings: [
-        { projectId: 'a', filePath: 'one.md', createdAt: 1, updatedAt: 1 },
-        { projectId: 'a', filePath: 'two.md', createdAt: 2, updatedAt: 2 },
+        { projectId: 'a', filePath: 'Projects/one.md', createdAt: 1, updatedAt: 1 },
+        { projectId: 'a', filePath: 'Projects/two.md', createdAt: 2, updatedAt: 2 },
         { projectId: '', filePath: 'skip.md' },
       ],
     });
     assert.equal(state.vaultName, 'Work');
+    assert.equal(state.vaultPath, '/home/you/Obsidian/Work');
     assert.equal(state.defaultFolder, 'Notes/Projects');
     assert.equal(state.bindings.length, 1);
-    assert.equal(state.bindings[0].filePath, 'two.md');
+    assert.equal(state.bindings[0].folderPath, 'Projects');
+    assert.equal(state.bindings[0].filePath, 'Projects');
+  });
+
+  it('migrates an old note file binding to its parent folder', () => {
+    const state = Core.parseState({
+      bindings: [{ projectId: 'p1', filePath: 'Work/Elmec.md' }],
+    });
+    assert.equal(state.bindings[0].folderPath, 'Work');
   });
 });
 
@@ -39,16 +52,29 @@ describe('normalizeVaultFilePath', () => {
   });
 });
 
+describe('normalizeVaultRootPath', () => {
+  it('accepts absolute POSIX and Windows vault paths', () => {
+    assert.equal(Core.normalizeVaultRootPath('/home/you/Vault/'), '/home/you/Vault');
+    assert.equal(Core.normalizeVaultRootPath('C:\\Users\\you\\Vault'), 'C:/Users/you/Vault');
+  });
+
+  it('rejects relative and UNC paths', () => {
+    assert.equal(Core.normalizeVaultRootPath('Obsidian/Work'), '');
+    assert.equal(Core.normalizeVaultRootPath('//server/share'), '');
+  });
+});
+
 describe('bindings', () => {
-  it('upserts and removes a project binding', () => {
+  it('upserts and removes a project folder binding', () => {
     let result = Core.upsertBinding({}, 'proj-1', 'Projects/Website.md', 1000);
     assert.equal(result.ok, true);
-    assert.equal(result.binding.filePath, 'Projects/Website.md');
+    assert.equal(result.binding.folderPath, 'Projects');
+    assert.equal(result.binding.filePath, 'Projects');
     assert.equal(result.binding.createdAt, 1000);
 
-    result = Core.upsertBinding(result.state, 'proj-1', 'Projects/Site.md', 2000);
+    result = Core.upsertBinding(result.state, 'proj-1', 'Work/Elmec', 2000);
     assert.equal(result.state.bindings.length, 1);
-    assert.equal(result.state.bindings[0].filePath, 'Projects/Site.md');
+    assert.equal(result.state.bindings[0].folderPath, 'Work/Elmec');
     assert.equal(result.state.bindings[0].createdAt, 1000);
     assert.equal(result.state.bindings[0].updatedAt, 2000);
 
@@ -56,40 +82,100 @@ describe('bindings', () => {
     assert.equal(removed.bindings.length, 0);
   });
 
-  it('rejects an empty or unsafe path', () => {
-    const result = Core.upsertBinding({}, 'proj-1', '../outside.md');
+  it('allows the vault root as a folder', () => {
+    const result = Core.upsertBinding({}, 'proj-1', '', 1000);
+    assert.equal(result.ok, true);
+    assert.equal(result.binding.folderPath, '');
+  });
+
+  it('rejects an empty project or an unsafe path', () => {
+    assert.equal(Core.upsertBinding({}, '', 'Projects').ok, false);
+    const result = Core.upsertBinding({}, 'proj-1', '../outside');
     assert.equal(result.ok, false);
     assert.equal(result.state.bindings.length, 0);
   });
 });
 
 describe('obsidian URIs', () => {
-  it('builds an open URI with encoded vault and file', () => {
+  it('builds an open URI for a folder, not a note file', () => {
     const state = { vaultName: 'My Vault' };
-    const uri = Core.buildOpenUri(state, { filePath: 'Projects/Website.md' });
-    assert.equal(
-      uri,
-      'obsidian://open?vault=My%20Vault&file=Projects%2FWebsite',
-    );
+    const uri = Core.buildOpenUri(state, { folderPath: 'Work/Elmec' });
+    assert.equal(uri, 'obsidian://open?vault=My%20Vault&file=Work%2FElmec');
   });
 
-  it('omits an empty vault name', () => {
-    const uri = Core.buildOpenUri({ vaultName: '' }, { filePath: 'Inbox.md' });
-    assert.equal(uri, 'obsidian://open?file=Inbox');
+  it('migrates a .md binding to the parent folder in the open URI', () => {
+    const uri = Core.buildOpenUri(
+      { vaultName: 'My Vault' },
+      { filePath: 'Projects/Website.md' },
+    );
+    assert.equal(uri, 'obsidian://open?vault=My%20Vault&file=Projects');
   });
 
-  it('builds a new-note URI with frontmatter content', () => {
-    const uri = Core.buildNewUri(
-      { vaultName: 'Work' },
-      { projectId: 'abc', filePath: 'Projects/Thesis.md' },
-      { id: 'abc', title: 'Thesis' },
+  it('omits an empty vault name and an empty vault-root file', () => {
+    const uri = Core.buildOpenUri({ vaultName: '' }, { folderPath: '' });
+    assert.equal(uri, 'obsidian://open?');
+  });
+});
+
+describe('folder ranking', () => {
+  it('lists likely project-name matches first', () => {
+    const folders = ['Inbox', 'Projects/Website', 'Work/Elmec', 'Archive'];
+    const ranked = Core.filterFolders(folders, '', 'Elmec');
+    assert.equal(ranked[0], 'Work/Elmec');
+  });
+
+  it('filters by search query then ranks remaining matches', () => {
+    const folders = [
+      { path: 'Work/Elmec', name: 'Elmec' },
+      { path: 'Projects/Website', name: 'Website' },
+      { path: 'Personal/Elm', name: 'Elm' },
+    ];
+    const ranked = Core.filterFolders(folders, 'elm', 'Elmec');
+    assert.deepEqual(
+      ranked.map((folder) => folder.path),
+      ['Work/Elmec', 'Personal/Elm'],
     );
-    assert.match(uri, /^obsidian:\/\/new\?/);
-    assert.match(uri, /vault=Work/);
-    assert.match(uri, /file=Projects%2FThesis/);
-    assert.match(uri, /content=/);
-    assert.match(decodeURIComponent(uri), /super-productivity-id: abc/);
-    assert.match(decodeURIComponent(uri), /This note is linked/);
+  });
+});
+
+describe('vault folder listing', () => {
+  it('walks a real vault-like folder tree and skips .obsidian', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'obsidian-vault-'));
+    fs.mkdirSync(path.join(tmp, 'Projects', 'Website'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, 'Work', 'Elmec'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, '.obsidian'), { recursive: true });
+    fs.mkdirSync(path.join(tmp, 'node_modules', 'pkg'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'Projects', 'readme.md'), '# note');
+
+    const script = Core.listVaultFoldersScript(tmp);
+    const folders = new Function('require', script)(require);
+    const paths = folders.map((folder) => folder.path).sort();
+
+    assert.deepEqual(paths, ['', 'Projects', 'Projects/Website', 'Work', 'Work/Elmec']);
+    assert.ok(script.includes('.obsidian'));
+  });
+
+  it('parses executeNodeScript folder results', () => {
+    const parsed = Core.parseNodeFolderResult({
+      success: true,
+      result: [
+        { path: '', name: '(vault root)' },
+        { path: 'Work/Elmec', name: 'Elmec' },
+        'Projects',
+      ],
+    });
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.folders.length, 3);
+    assert.equal(parsed.folders[1].path, 'Work/Elmec');
+  });
+
+  it('surfaces node script failures', () => {
+    const parsed = Core.parseNodeFolderResult({
+      success: false,
+      error: { message: 'Vault folder not found' },
+    });
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.error, /Vault folder not found/);
   });
 });
 

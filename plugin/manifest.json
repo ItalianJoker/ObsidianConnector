@@ -1,10 +1,10 @@
 {
   "id": "obsidian-connector",
   "name": "Obsidian Connector",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "manifestVersion": 1,
   "minSupVersion": "14.0.0",
-  "description": "Link Super Productivity projects to Markdown files in an Obsidian vault.",
+  "description": "Link Super Productivity projects to existing folders in an Obsidian vault.",
   "author": "Luca",
   "homepage": "https://github.com/ItalianJoker/ObsidianConnector",
   "icon": "icon.svg",
@@ -23,8 +23,12 @@
     "loadSyncedData",
     "showSnack",
     "openDialog",
-    "showIndexHtmlAsView"
+    "showIndexHtmlAsView",
+    "nodeExecution"
   ],
+  "nodeScriptConfig": {
+    "timeout": 15000
+  },
   "i18n": {
     "languages": ["en"]
   }

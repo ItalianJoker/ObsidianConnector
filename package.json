@@ -1,8 +1,8 @@
 {
   "name": "obsidian-connector",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
-  "description": "Super Productivity plugin that links projects to files in an Obsidian vault.",
+  "description": "Super Productivity plugin that links existing projects to existing folders in an Obsidian vault.",
   "license": "MIT",
   "scripts": {
     "test": "node --test test/*.test.js",

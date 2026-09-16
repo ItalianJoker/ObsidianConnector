@@ -41,5 +41,17 @@ describe('plugin package', () => {
     assert.ok(Array.isArray(manifest.permissions));
     assert.ok(manifest.permissions.includes('getAllProjects'));
     assert.ok(manifest.permissions.includes('persistDataSynced'));
+    assert.ok(manifest.permissions.includes('nodeExecution'));
+  });
+
+  it('ships a folder picker instead of a create-note flow', () => {
+    const html = fs.readFileSync(path.join(root, 'src/index.template.html'), 'utf8');
+    assert.match(html, /id="folder-list"/);
+    assert.match(html, /id="vault-path"/);
+    assert.match(html, /id="load-folders"/);
+    assert.doesNotMatch(html, /id="suggest-path"/);
+    assert.doesNotMatch(html, /id="file-path"/);
+    assert.doesNotMatch(html, /id="default-folder"/);
+    assert.match(html, /Nothing new is created/);
   });
 });
