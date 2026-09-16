@@ -64,10 +64,7 @@ Requires Super Productivity **14.0.0** or later. Works on desktop, web, Android,
 
 | Version | Notes |
 | --- | --- |
-| [v1.2.0](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.2.0) | Existing pages only; mobile path entry; link-window entry points |
-| [v1.1.0](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.1.0) | Browse vault folders |
-| [v1.0.1](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.0.1) | Fix `[object Promise]` labels |
-| [v1.0.0](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.0.0) | First release |
+| [v1.0.0](https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.0.0) | First release: link existing Super Productivity projects to existing Obsidian pages (desktop + mobile) |
 
 See [CHANGELOG.md](CHANGELOG.md).
 

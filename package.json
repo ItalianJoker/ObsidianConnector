@@ -1,6 +1,6 @@
 {
   "name": "obsidian-connector",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Super Productivity plugin that links existing projects to existing Obsidian pages (desktop + mobile).",
   "license": "MIT",

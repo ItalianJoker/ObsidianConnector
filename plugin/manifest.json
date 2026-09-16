@@ -1,7 +1,7 @@
 {
   "id": "obsidian-connector",
   "name": "Obsidian Connector",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "manifestVersion": 1,
   "minSupVersion": "14.0.0",
   "description": "Link Super Productivity projects to existing Obsidian pages. Works on desktop and mobile; never creates a new page.",
