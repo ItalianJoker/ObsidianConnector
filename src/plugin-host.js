@@ -87,7 +87,7 @@
     }
 
     const uri = Core.buildOpenUri(state, binding);
-    const result = Core.openExternalUri(uri);
+    const result = await Core.openExternalUri(uri, api);
     if (!result.ok) {
       const copied = await Core.copyText(uri);
       api.showSnack({

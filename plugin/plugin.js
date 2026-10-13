@@ -53,6 +53,11 @@
     return !!value && typeof value === 'object' && !Array.isArray(value);
   }
 
+  /**
+   * Parse persisted plugin JSON into a normalized state object.
+   * @param {unknown} raw
+   * @returns {{ version: number, vaultName: string, vaultPath: string, defaultFolder: string, bindings: object[] }}
+   */
   function parseState(raw) {
     const empty = createEmptyState();
     if (raw == null || raw === '') {
@@ -213,7 +218,9 @@
 
   /**
    * Vault-relative path: forward slashes, no leading slash, no `..` segments.
-   * Keeps a trailing `.md` when present.
+   * Keeps a trailing `.md` when present. Returns `''` for unsafe paths.
+   * @param {unknown} filePath
+   * @returns {string}
    */
   function normalizeVaultFilePath(filePath) {
     if (typeof filePath !== 'string') {
@@ -280,6 +287,12 @@
     return `[[${stripMarkdownExtension(normalized)}]]`;
   }
 
+  /**
+   * Build an `application/x-www-form-urlencoded` query with encodeURIComponent
+   * on every key and value. Empty values are omitted.
+   * @param {Record<string, string|number|null|undefined>} params
+   * @returns {string}
+   */
   function queryString(params) {
     const parts = [];
     for (const [key, value] of Object.entries(params)) {
@@ -291,7 +304,13 @@
     return parts.join('&');
   }
 
-  /** Build obsidian://open for an existing binding. Never uses obsidian://new. */
+  /**
+   * Build `obsidian://open` for an existing binding. Never uses `obsidian://new`.
+   * Vault and file params are always encodeURIComponent'd.
+   * @param {{ vaultName?: string }|null} state
+   * @param {{ filePath?: string, folderPath?: string }|null} binding
+   * @returns {string|null}
+   */
   function buildOpenUri(state, binding) {
     if (!binding) {
       return null;
@@ -304,6 +323,15 @@
     })}`;
   }
 
+  /**
+   * True when `uri` is a plugin-built `obsidian://open?…` (encoded query only).
+   * @param {unknown} uri
+   * @returns {boolean}
+   */
+  function isSafeObsidianOpenUri(uri) {
+    return typeof uri === 'string' && /^obsidian:\/\/open\?[A-Za-z0-9\-_.!~*'()%&=+]*$/.test(uri);
+  }
+
   function getBinding(state, projectId) {
     if (!state || !projectId) {
       return null;
@@ -311,6 +339,10 @@
     return state.bindings.find((binding) => binding.projectId === projectId) || null;
   }
 
+  /**
+   * Bind an existing Super Productivity project to an existing vault-relative page.
+   * @returns {{ ok: boolean, state: object, binding?: object, message?: string }}
+   */
   function upsertBinding(state, projectId, filePath, now) {
     const next = parseState(state);
     if (!projectId) {
@@ -392,7 +424,13 @@
     return rankPath(stripMarkdownExtension(pagePath), projectTitle);
   }
 
-  /** Filter/search existing pages and rank likely project-name matches first. */
+  /**
+   * Filter/search existing pages and rank likely project-name matches first.
+   * @param {Array<string|{path?: string, name?: string}>} pages
+   * @param {string} query
+   * @param {string} [projectTitle]
+   * @returns {Array<string|{path?: string, name?: string}>}
+   */
   function filterPages(pages, query, projectTitle) {
     const list = Array.isArray(pages) ? pages.slice() : [];
     const needle = String(query || '').trim().toLowerCase();
@@ -420,6 +458,263 @@
       return pathA.localeCompare(pathB);
     });
     return filtered;
+  }
+
+  /**
+   * Debounce `fn` by `waitMs` (default 150). `.cancel()` clears a pending call.
+   * @template {(...args: any[]) => void} F
+   * @param {F} fn
+   * @param {number} [waitMs]
+   * @returns {F & { cancel: () => void }}
+   */
+  function debounce(fn, waitMs) {
+    const wait = typeof waitMs === 'number' && waitMs >= 0 ? waitMs : 150;
+    let timer = 0;
+    const wrapped = function debounced() {
+      const ctx = this;
+      const args = arguments;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(() => {
+        timer = 0;
+        fn.apply(ctx, args);
+      }, wait);
+    };
+    wrapped.cancel = function cancel() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = 0;
+      }
+    };
+    return wrapped;
+  }
+
+  /**
+   * Filter linked bindings by project title or vault-relative path.
+   * @param {Array<{projectId: string, filePath?: string, folderPath?: string}>} bindings
+   * @param {string} query
+   * @param {(projectId: string) => string} [titleOf]
+   * @returns {Array<object>}
+   */
+  function filterBindings(bindings, query, titleOf) {
+    const list = Array.isArray(bindings) ? bindings.slice() : [];
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) {
+      return list;
+    }
+    return list.filter((binding) => {
+      const title = typeof titleOf === 'function' ? titleOf(binding.projectId) : '';
+      const path = bindingTarget(binding);
+      return (
+        String(title || '')
+          .toLowerCase()
+          .includes(needle) ||
+        String(path || '')
+          .toLowerCase()
+          .includes(needle) ||
+        String(binding.projectId || '')
+          .toLowerCase()
+          .includes(needle)
+      );
+    });
+  }
+
+  function pagePathOf(page) {
+    if (typeof page === 'string') {
+      return withMarkdownExtension(page);
+    }
+    if (page && typeof page === 'object') {
+      return withMarkdownExtension(page.path || page.name || '');
+    }
+    return '';
+  }
+
+  /**
+   * Parse vault-relative `.md` paths into a sorted folder → file tree.
+   * @param {Array<string|{path?: string, name?: string}>} pages
+   * @returns {{ type: 'folder', name: string, path: string, children: Array<object> }}
+   */
+  function buildNoteTree(pages) {
+    const root = { type: 'folder', name: '', path: '', children: [] };
+    const folders = new Map([['', root]]);
+
+    for (const page of Array.isArray(pages) ? pages : []) {
+      const notePath = pagePathOf(page);
+      if (!notePath) {
+        continue;
+      }
+      const parts = notePath.split('/');
+      let parentPath = '';
+      for (let i = 0; i < parts.length - 1; i += 1) {
+        const name = parts[i];
+        const folderPath = parentPath ? `${parentPath}/${name}` : name;
+        if (!folders.has(folderPath)) {
+          const node = { type: 'folder', name, path: folderPath, children: [] };
+          folders.get(parentPath).children.push(node);
+          folders.set(folderPath, node);
+        }
+        parentPath = folderPath;
+      }
+      const fileName = parts[parts.length - 1];
+      folders.get(parentPath).children.push({
+        type: 'file',
+        name: stripMarkdownExtension(fileName),
+        path: notePath,
+      });
+    }
+
+    function sortNode(node) {
+      if (!node.children) {
+        return;
+      }
+      node.children.sort((a, b) => {
+        if (a.type !== b.type) {
+          return a.type === 'folder' ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
+      node.children.forEach(sortNode);
+    }
+    sortNode(root);
+    return root;
+  }
+
+  /**
+   * Ancestor folder paths of a vault-relative file (root omitted).
+   * @param {string} filePath
+   * @returns {string[]}
+   */
+  function ancestorFolderPaths(filePath) {
+    const normalized = normalizeVaultFilePath(filePath);
+    if (!normalized) {
+      return [];
+    }
+    const parts = normalized.split('/');
+    parts.pop();
+    const out = [];
+    let acc = '';
+    for (const part of parts) {
+      acc = acc ? `${acc}/${part}` : part;
+      out.push(acc);
+    }
+    return out;
+  }
+
+  function expandAllFolders(node, expanded) {
+    if (!node || node.type !== 'folder') {
+      return;
+    }
+    if (node.path) {
+      expanded.add(node.path);
+    }
+    for (const child of node.children || []) {
+      expandAllFolders(child, expanded);
+    }
+  }
+
+  /**
+   * Filter a note tree by name/path. Matching folder branches are returned
+   * and listed in `expanded` so the UI can auto-open them.
+   * @param {object} root
+   * @param {string} query
+   * @returns {{ tree: object, expanded: Set<string> }}
+   */
+  function filterNoteTree(root, query) {
+    const empty = root && typeof root === 'object'
+      ? root
+      : { type: 'folder', name: '', path: '', children: [] };
+    const needle = String(query || '').trim().toLowerCase();
+    const expanded = new Set();
+    if (!needle) {
+      return { tree: empty, expanded };
+    }
+
+    function visit(node) {
+      if (!node) {
+        return null;
+      }
+      if (node.type === 'file') {
+        const path = String(node.path || '').toLowerCase();
+        const name = String(node.name || '').toLowerCase();
+        return path.includes(needle) || name.includes(needle) ? node : null;
+      }
+      const kept = [];
+      for (const child of node.children || []) {
+        const next = visit(child);
+        if (next) {
+          kept.push(next);
+        }
+      }
+      if (kept.length) {
+        if (node.path) {
+          expanded.add(node.path);
+        }
+        return { type: 'folder', name: node.name, path: node.path, children: kept };
+      }
+      if (node.name && String(node.name).toLowerCase().includes(needle)) {
+        expandAllFolders(node, expanded);
+        return node;
+      }
+      return null;
+    }
+
+    const filtered = visit(empty);
+    return {
+      tree: filtered || { type: 'folder', name: '', path: '', children: [] },
+      expanded,
+    };
+  }
+
+  /**
+   * Visible tree rows only — children of collapsed folders are omitted (lazy DOM).
+   * @param {object} root
+   * @param {Set<string>|string[]} expanded
+   * @returns {Array<{type: string, name: string, path: string, depth: number}>}
+   */
+  function flattenVisibleTree(root, expanded) {
+    const open = expanded instanceof Set ? expanded : new Set(expanded || []);
+    const rows = [];
+    function walk(nodes, depth) {
+      for (const node of nodes || []) {
+        rows.push({
+          type: node.type,
+          name: node.name,
+          path: node.path,
+          depth,
+        });
+        if (node.type === 'folder' && open.has(node.path) && node.children) {
+          walk(node.children, depth + 1);
+        }
+      }
+    }
+    walk((root && root.children) || [], 0);
+    return rows;
+  }
+
+  /**
+   * Lightweight vault config check for UI warnings.
+   * @param {object} state
+   * @param {{ requirePath?: boolean }} [opts]
+   * @returns {{ ok: boolean, errors: string[], warnings: string[] }}
+   */
+  function vaultConfigStatus(state, opts) {
+    const requirePath = !!(opts && opts.requirePath);
+    const errors = [];
+    const warnings = [];
+    const vaultName =
+      state && typeof state.vaultName === 'string' ? state.vaultName.trim() : '';
+    const vaultPath = state ? normalizeVaultRootPath(state.vaultPath) : '';
+
+    if (requirePath && !vaultPath) {
+      errors.push(
+        'Vault folder path is missing or invalid. Enter an absolute path to the vault on this computer.',
+      );
+    }
+    if (!vaultName) {
+      warnings.push('Vault name is empty. Obsidian will open the last-used vault.');
+    }
+    return { ok: errors.length === 0, errors, warnings };
   }
 
   /**
@@ -533,34 +828,139 @@ return pages;
     );
   }
 
-  function openExternalUri(uri) {
-    if (!uri || typeof uri !== 'string') {
-      return { ok: false, uri: '', copied: false };
+  /**
+   * Node script for executeNodeScript: hand `obsidian://open` to the OS.
+   * Prefers Electron `shell.openExternal` (starts Obsidian when it is closed)
+   * and falls back to `open` / `xdg-open` / `cmd start`. Returns immediately.
+   * @param {string} uri
+   * @returns {string}
+   */
+  function openObsidianUriScript(uri) {
+    return `
+const uri = ${JSON.stringify(uri)};
+if (!/^obsidian:\\/\\/open\\?/.test(uri)) {
+  throw new Error('Refusing to open a non-obsidian URI');
+}
+try {
+  const electron = require('electron');
+  const shell = electron && (electron.shell || (electron.default && electron.default.shell));
+  if (shell && typeof shell.openExternal === 'function') {
+    const opened = shell.openExternal(uri);
+    if (opened && typeof opened.then === 'function') {
+      opened.catch(function () {});
     }
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      return { ok: false, uri, copied: false };
-    }
+    return { ok: true, via: 'electron' };
+  }
+} catch (e) {}
+const { spawn } = require('child_process');
+const plat = process.platform;
+let child;
+if (plat === 'darwin') {
+  child = spawn('open', [uri], { detached: true, stdio: 'ignore' });
+} else if (plat === 'win32') {
+  child = spawn('cmd', ['/c', 'start', '', uri], { detached: true, stdio: 'ignore' });
+} else {
+  child = spawn('xdg-open', [uri], { detached: true, stdio: 'ignore' });
+}
+if (child && typeof child.unref === 'function') {
+  child.unref();
+}
+return { ok: true, via: 'os' };
+`;
+  }
 
+  function tryHostOpenExternal(uri) {
     try {
-      const opened = window.open(uri, '_blank');
-      if (opened) {
-        return { ok: true, uri, copied: false };
+      const ea = typeof window !== 'undefined' ? window.ea : null;
+      if (ea && typeof ea.openExternalUrl === 'function') {
+        ea.openExternalUrl(uri);
+        return true;
       }
     } catch {
-      // fall through
+      // Host API not available (iframe / web).
     }
+    return false;
+  }
 
+  function tryHiddenIframe(uri) {
+    if (typeof document === 'undefined') {
+      return false;
+    }
+    try {
+      const frame = document.createElement('iframe');
+      frame.setAttribute('hidden', '');
+      frame.setAttribute('aria-hidden', 'true');
+      frame.style.cssText = 'display:none;width:0;height:0;border:0;position:absolute';
+      frame.src = uri;
+      document.body.appendChild(frame);
+      setTimeout(() => {
+        if (frame.parentNode) {
+          frame.parentNode.removeChild(frame);
+        }
+      }, 2000);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function tryProtocolAnchor(uri) {
+    if (typeof document === 'undefined') {
+      return false;
+    }
     try {
       const anchor = document.createElement('a');
       anchor.href = uri;
-      anchor.target = '_blank';
+      // No target=_blank: Electron treats that as a new BrowserWindow and
+      // often fails to hand a custom protocol to the OS when the app is closed.
       anchor.rel = 'noopener noreferrer';
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      return { ok: true, uri, copied: false };
+      return true;
     } catch {
-      // fall through
+      return false;
+    }
+  }
+
+  /**
+   * Launch an `obsidian://open` URI without blocking the Super Productivity UI.
+   * Desktop (most reliable cold-start): `executeNodeScript` → Electron
+   * `shell.openExternal`, then `window.ea.openExternalUrl`.
+   * Fallback: hidden iframe / in-place protocol link (no `window.open`).
+   * @param {string} uri
+   * @param {{ executeNodeScript?: Function }|null} [api]
+   * @returns {Promise<{ok: boolean, uri: string, copied: boolean, via?: string}>}
+   */
+  async function openExternalUri(uri, api) {
+    if (!isSafeObsidianOpenUri(uri)) {
+      return { ok: false, uri: typeof uri === 'string' ? uri : '', copied: false };
+    }
+
+    if (api && typeof api.executeNodeScript === 'function') {
+      try {
+        const result = await api.executeNodeScript({
+          script: openObsidianUriScript(uri),
+          timeout: 4000,
+        });
+        if (result && result.success) {
+          return { ok: true, uri, copied: false, via: 'electron' };
+        }
+      } catch {
+        // Node bridge unavailable or consent denied — try renderer fallbacks.
+      }
+    }
+
+    if (tryHostOpenExternal(uri)) {
+      return { ok: true, uri, copied: false, via: 'ea' };
+    }
+
+    if (tryHiddenIframe(uri)) {
+      return { ok: true, uri, copied: false, via: 'iframe' };
+    }
+
+    if (tryProtocolAnchor(uri)) {
+      return { ok: true, uri, copied: false, via: 'anchor' };
     }
 
     return { ok: false, uri, copied: false };
@@ -653,6 +1053,13 @@ return pages;
     updateVaultSettings,
     visibleProjects,
     filterPages,
+    filterBindings,
+    filterNoteTree,
+    buildNoteTree,
+    flattenVisibleTree,
+    ancestorFolderPaths,
+    debounce,
+    vaultConfigStatus,
     rankPage,
     listVaultPagesScript,
     parseNodePageResult,
@@ -661,6 +1068,8 @@ return pages;
     isMobilePlatform,
     canBrowseVault,
     isNoteTarget,
+    isSafeObsidianOpenUri,
+    openObsidianUriScript,
     openExternalUri,
     copyText,
     t,
@@ -756,7 +1165,7 @@ return pages;
     }
 
     const uri = Core.buildOpenUri(state, binding);
-    const result = Core.openExternalUri(uri);
+    const result = await Core.openExternalUri(uri, api);
     if (!result.ok) {
       const copied = await Core.copyText(uri);
       api.showSnack({

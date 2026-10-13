@@ -157,7 +157,16 @@ body {
 .path {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85em;
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.binding-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .actions {
@@ -192,7 +201,7 @@ body {
 }
 
 .page-list {
-  max-height: 260px;
+  max-height: 320px;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -206,7 +215,10 @@ body {
   padding: 10px;
 }
 
-.page-item {
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   text-align: left;
   border: 0;
   border-radius: 0;
@@ -214,21 +226,121 @@ body {
   background: transparent;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85em;
-  padding: 10px 12px;
-  min-height: 44px;
+  padding: 8px 12px;
+  padding-left: calc(10px + (var(--depth, 0) * 16px));
+  min-height: 36px;
+  max-width: 100%;
+  overflow: hidden;
 }
 
-.page-item:last-child {
+.tree-row:last-child {
   border-bottom: 0;
 }
 
-.page-item.match:not(.selected) {
+.tree-row.match:not(.selected) {
   background: color-mix(in srgb, var(--c-primary, #5b7fff) 12%, transparent);
 }
 
-.page-item.selected {
+.tree-row.selected {
   background: var(--c-primary, #3d5afe);
   color: #fff;
+}
+
+.tree-icon {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+}
+
+.tree-icon-folder {
+  box-sizing: border-box;
+  width: 0;
+  height: 0;
+  border: 5px solid transparent;
+  border-left-color: currentColor;
+  transform-origin: 35% 50%;
+}
+
+.tree-row.expanded .tree-icon-folder {
+  transform: rotate(90deg);
+}
+
+.tree-icon-file {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.tree-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+}
+
+.section-toggle-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.section-toggle-main #list-heading {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.chevron {
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border: 5px solid transparent;
+  border-top-color: currentColor;
+  margin-top: 4px;
+}
+
+.section-toggle.open .chevron {
+  transform: rotate(180deg);
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.linked-panel {
+  margin-top: var(--s, 8px);
+}
+
+.linked-card {
+  padding-top: var(--s2, 16px);
+}
+
+#vault-config-status[data-tone='error'] {
+  color: var(--c-warn, #c62828);
 }
 
 .selected-page-row {
@@ -238,7 +350,12 @@ body {
 
 .selected-page-row code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  word-break: break-all;
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .binding-head {
@@ -371,7 +488,9 @@ body {
         <div class="row">
           <button id="save-vault" type="button" class="primary">Save</button>
           <button id="load-pages" type="button">Load existing pages</button>
+          <button id="refresh-pages" type="button" class="hidden">Refresh</button>
         </div>
+        <p id="vault-config-status" class="hint hidden" role="status"></p>
       </section>
 
       <section class="card">
@@ -399,7 +518,7 @@ body {
           <p id="page-hint" class="hint text-muted">
             Choose a page that already exists in the vault. Nothing new is created.
           </p>
-          <div id="page-list" class="page-list" role="listbox" aria-label="Existing Obsidian pages"></div>
+          <div id="page-list" class="page-list page-tree" role="tree" aria-label="Existing Obsidian pages"></div>
         </div>
 
         <div id="mobile-page-entry" class="hidden">
@@ -428,9 +547,33 @@ body {
         </div>
       </section>
 
-      <section>
-        <h2 id="list-heading">Linked projects</h2>
-        <div id="bindings" class="bindings"></div>
+      <section class="card linked-card">
+        <button
+          type="button"
+          id="linked-toggle"
+          class="section-toggle"
+          aria-expanded="false"
+          aria-controls="linked-panel"
+        >
+          <span class="section-toggle-main">
+            <span id="list-heading">Linked projects</span>
+            <span id="linked-count" class="text-muted">(0)</span>
+          </span>
+          <span class="chevron" aria-hidden="true"></span>
+        </button>
+        <div id="linked-panel" class="linked-panel hidden">
+          <div class="field">
+            <label id="linked-search-label" class="sr-only" for="linked-search">Search linked projects…</label>
+            <input
+              id="linked-search"
+              type="search"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Search linked projects…"
+            />
+          </div>
+          <div id="bindings" class="bindings"></div>
+        </div>
       </section>
     </div>
 
@@ -490,6 +633,11 @@ body {
     return !!value && typeof value === 'object' && !Array.isArray(value);
   }
 
+  /**
+   * Parse persisted plugin JSON into a normalized state object.
+   * @param {unknown} raw
+   * @returns {{ version: number, vaultName: string, vaultPath: string, defaultFolder: string, bindings: object[] }}
+   */
   function parseState(raw) {
     const empty = createEmptyState();
     if (raw == null || raw === '') {
@@ -650,7 +798,9 @@ body {
 
   /**
    * Vault-relative path: forward slashes, no leading slash, no `..` segments.
-   * Keeps a trailing `.md` when present.
+   * Keeps a trailing `.md` when present. Returns `''` for unsafe paths.
+   * @param {unknown} filePath
+   * @returns {string}
    */
   function normalizeVaultFilePath(filePath) {
     if (typeof filePath !== 'string') {
@@ -717,6 +867,12 @@ body {
     return `[[${stripMarkdownExtension(normalized)}]]`;
   }
 
+  /**
+   * Build an `application/x-www-form-urlencoded` query with encodeURIComponent
+   * on every key and value. Empty values are omitted.
+   * @param {Record<string, string|number|null|undefined>} params
+   * @returns {string}
+   */
   function queryString(params) {
     const parts = [];
     for (const [key, value] of Object.entries(params)) {
@@ -728,7 +884,13 @@ body {
     return parts.join('&');
   }
 
-  /** Build obsidian://open for an existing binding. Never uses obsidian://new. */
+  /**
+   * Build `obsidian://open` for an existing binding. Never uses `obsidian://new`.
+   * Vault and file params are always encodeURIComponent'd.
+   * @param {{ vaultName?: string }|null} state
+   * @param {{ filePath?: string, folderPath?: string }|null} binding
+   * @returns {string|null}
+   */
   function buildOpenUri(state, binding) {
     if (!binding) {
       return null;
@@ -741,6 +903,15 @@ body {
     })}`;
   }
 
+  /**
+   * True when `uri` is a plugin-built `obsidian://open?…` (encoded query only).
+   * @param {unknown} uri
+   * @returns {boolean}
+   */
+  function isSafeObsidianOpenUri(uri) {
+    return typeof uri === 'string' && /^obsidian:\/\/open\?[A-Za-z0-9\-_.!~*'()%&=+]*$/.test(uri);
+  }
+
   function getBinding(state, projectId) {
     if (!state || !projectId) {
       return null;
@@ -748,6 +919,10 @@ body {
     return state.bindings.find((binding) => binding.projectId === projectId) || null;
   }
 
+  /**
+   * Bind an existing Super Productivity project to an existing vault-relative page.
+   * @returns {{ ok: boolean, state: object, binding?: object, message?: string }}
+   */
   function upsertBinding(state, projectId, filePath, now) {
     const next = parseState(state);
     if (!projectId) {
@@ -829,7 +1004,13 @@ body {
     return rankPath(stripMarkdownExtension(pagePath), projectTitle);
   }
 
-  /** Filter/search existing pages and rank likely project-name matches first. */
+  /**
+   * Filter/search existing pages and rank likely project-name matches first.
+   * @param {Array<string|{path?: string, name?: string}>} pages
+   * @param {string} query
+   * @param {string} [projectTitle]
+   * @returns {Array<string|{path?: string, name?: string}>}
+   */
   function filterPages(pages, query, projectTitle) {
     const list = Array.isArray(pages) ? pages.slice() : [];
     const needle = String(query || '').trim().toLowerCase();
@@ -857,6 +1038,263 @@ body {
       return pathA.localeCompare(pathB);
     });
     return filtered;
+  }
+
+  /**
+   * Debounce `fn` by `waitMs` (default 150). `.cancel()` clears a pending call.
+   * @template {(...args: any[]) => void} F
+   * @param {F} fn
+   * @param {number} [waitMs]
+   * @returns {F & { cancel: () => void }}
+   */
+  function debounce(fn, waitMs) {
+    const wait = typeof waitMs === 'number' && waitMs >= 0 ? waitMs : 150;
+    let timer = 0;
+    const wrapped = function debounced() {
+      const ctx = this;
+      const args = arguments;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(() => {
+        timer = 0;
+        fn.apply(ctx, args);
+      }, wait);
+    };
+    wrapped.cancel = function cancel() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = 0;
+      }
+    };
+    return wrapped;
+  }
+
+  /**
+   * Filter linked bindings by project title or vault-relative path.
+   * @param {Array<{projectId: string, filePath?: string, folderPath?: string}>} bindings
+   * @param {string} query
+   * @param {(projectId: string) => string} [titleOf]
+   * @returns {Array<object>}
+   */
+  function filterBindings(bindings, query, titleOf) {
+    const list = Array.isArray(bindings) ? bindings.slice() : [];
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) {
+      return list;
+    }
+    return list.filter((binding) => {
+      const title = typeof titleOf === 'function' ? titleOf(binding.projectId) : '';
+      const path = bindingTarget(binding);
+      return (
+        String(title || '')
+          .toLowerCase()
+          .includes(needle) ||
+        String(path || '')
+          .toLowerCase()
+          .includes(needle) ||
+        String(binding.projectId || '')
+          .toLowerCase()
+          .includes(needle)
+      );
+    });
+  }
+
+  function pagePathOf(page) {
+    if (typeof page === 'string') {
+      return withMarkdownExtension(page);
+    }
+    if (page && typeof page === 'object') {
+      return withMarkdownExtension(page.path || page.name || '');
+    }
+    return '';
+  }
+
+  /**
+   * Parse vault-relative `.md` paths into a sorted folder → file tree.
+   * @param {Array<string|{path?: string, name?: string}>} pages
+   * @returns {{ type: 'folder', name: string, path: string, children: Array<object> }}
+   */
+  function buildNoteTree(pages) {
+    const root = { type: 'folder', name: '', path: '', children: [] };
+    const folders = new Map([['', root]]);
+
+    for (const page of Array.isArray(pages) ? pages : []) {
+      const notePath = pagePathOf(page);
+      if (!notePath) {
+        continue;
+      }
+      const parts = notePath.split('/');
+      let parentPath = '';
+      for (let i = 0; i < parts.length - 1; i += 1) {
+        const name = parts[i];
+        const folderPath = parentPath ? `${parentPath}/${name}` : name;
+        if (!folders.has(folderPath)) {
+          const node = { type: 'folder', name, path: folderPath, children: [] };
+          folders.get(parentPath).children.push(node);
+          folders.set(folderPath, node);
+        }
+        parentPath = folderPath;
+      }
+      const fileName = parts[parts.length - 1];
+      folders.get(parentPath).children.push({
+        type: 'file',
+        name: stripMarkdownExtension(fileName),
+        path: notePath,
+      });
+    }
+
+    function sortNode(node) {
+      if (!node.children) {
+        return;
+      }
+      node.children.sort((a, b) => {
+        if (a.type !== b.type) {
+          return a.type === 'folder' ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
+      node.children.forEach(sortNode);
+    }
+    sortNode(root);
+    return root;
+  }
+
+  /**
+   * Ancestor folder paths of a vault-relative file (root omitted).
+   * @param {string} filePath
+   * @returns {string[]}
+   */
+  function ancestorFolderPaths(filePath) {
+    const normalized = normalizeVaultFilePath(filePath);
+    if (!normalized) {
+      return [];
+    }
+    const parts = normalized.split('/');
+    parts.pop();
+    const out = [];
+    let acc = '';
+    for (const part of parts) {
+      acc = acc ? `${acc}/${part}` : part;
+      out.push(acc);
+    }
+    return out;
+  }
+
+  function expandAllFolders(node, expanded) {
+    if (!node || node.type !== 'folder') {
+      return;
+    }
+    if (node.path) {
+      expanded.add(node.path);
+    }
+    for (const child of node.children || []) {
+      expandAllFolders(child, expanded);
+    }
+  }
+
+  /**
+   * Filter a note tree by name/path. Matching folder branches are returned
+   * and listed in `expanded` so the UI can auto-open them.
+   * @param {object} root
+   * @param {string} query
+   * @returns {{ tree: object, expanded: Set<string> }}
+   */
+  function filterNoteTree(root, query) {
+    const empty = root && typeof root === 'object'
+      ? root
+      : { type: 'folder', name: '', path: '', children: [] };
+    const needle = String(query || '').trim().toLowerCase();
+    const expanded = new Set();
+    if (!needle) {
+      return { tree: empty, expanded };
+    }
+
+    function visit(node) {
+      if (!node) {
+        return null;
+      }
+      if (node.type === 'file') {
+        const path = String(node.path || '').toLowerCase();
+        const name = String(node.name || '').toLowerCase();
+        return path.includes(needle) || name.includes(needle) ? node : null;
+      }
+      const kept = [];
+      for (const child of node.children || []) {
+        const next = visit(child);
+        if (next) {
+          kept.push(next);
+        }
+      }
+      if (kept.length) {
+        if (node.path) {
+          expanded.add(node.path);
+        }
+        return { type: 'folder', name: node.name, path: node.path, children: kept };
+      }
+      if (node.name && String(node.name).toLowerCase().includes(needle)) {
+        expandAllFolders(node, expanded);
+        return node;
+      }
+      return null;
+    }
+
+    const filtered = visit(empty);
+    return {
+      tree: filtered || { type: 'folder', name: '', path: '', children: [] },
+      expanded,
+    };
+  }
+
+  /**
+   * Visible tree rows only — children of collapsed folders are omitted (lazy DOM).
+   * @param {object} root
+   * @param {Set<string>|string[]} expanded
+   * @returns {Array<{type: string, name: string, path: string, depth: number}>}
+   */
+  function flattenVisibleTree(root, expanded) {
+    const open = expanded instanceof Set ? expanded : new Set(expanded || []);
+    const rows = [];
+    function walk(nodes, depth) {
+      for (const node of nodes || []) {
+        rows.push({
+          type: node.type,
+          name: node.name,
+          path: node.path,
+          depth,
+        });
+        if (node.type === 'folder' && open.has(node.path) && node.children) {
+          walk(node.children, depth + 1);
+        }
+      }
+    }
+    walk((root && root.children) || [], 0);
+    return rows;
+  }
+
+  /**
+   * Lightweight vault config check for UI warnings.
+   * @param {object} state
+   * @param {{ requirePath?: boolean }} [opts]
+   * @returns {{ ok: boolean, errors: string[], warnings: string[] }}
+   */
+  function vaultConfigStatus(state, opts) {
+    const requirePath = !!(opts && opts.requirePath);
+    const errors = [];
+    const warnings = [];
+    const vaultName =
+      state && typeof state.vaultName === 'string' ? state.vaultName.trim() : '';
+    const vaultPath = state ? normalizeVaultRootPath(state.vaultPath) : '';
+
+    if (requirePath && !vaultPath) {
+      errors.push(
+        'Vault folder path is missing or invalid. Enter an absolute path to the vault on this computer.',
+      );
+    }
+    if (!vaultName) {
+      warnings.push('Vault name is empty. Obsidian will open the last-used vault.');
+    }
+    return { ok: errors.length === 0, errors, warnings };
   }
 
   /**
@@ -970,34 +1408,139 @@ return pages;
     );
   }
 
-  function openExternalUri(uri) {
-    if (!uri || typeof uri !== 'string') {
-      return { ok: false, uri: '', copied: false };
+  /**
+   * Node script for executeNodeScript: hand `obsidian://open` to the OS.
+   * Prefers Electron `shell.openExternal` (starts Obsidian when it is closed)
+   * and falls back to `open` / `xdg-open` / `cmd start`. Returns immediately.
+   * @param {string} uri
+   * @returns {string}
+   */
+  function openObsidianUriScript(uri) {
+    return `
+const uri = ${JSON.stringify(uri)};
+if (!/^obsidian:\\/\\/open\\?/.test(uri)) {
+  throw new Error('Refusing to open a non-obsidian URI');
+}
+try {
+  const electron = require('electron');
+  const shell = electron && (electron.shell || (electron.default && electron.default.shell));
+  if (shell && typeof shell.openExternal === 'function') {
+    const opened = shell.openExternal(uri);
+    if (opened && typeof opened.then === 'function') {
+      opened.catch(function () {});
     }
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      return { ok: false, uri, copied: false };
-    }
+    return { ok: true, via: 'electron' };
+  }
+} catch (e) {}
+const { spawn } = require('child_process');
+const plat = process.platform;
+let child;
+if (plat === 'darwin') {
+  child = spawn('open', [uri], { detached: true, stdio: 'ignore' });
+} else if (plat === 'win32') {
+  child = spawn('cmd', ['/c', 'start', '', uri], { detached: true, stdio: 'ignore' });
+} else {
+  child = spawn('xdg-open', [uri], { detached: true, stdio: 'ignore' });
+}
+if (child && typeof child.unref === 'function') {
+  child.unref();
+}
+return { ok: true, via: 'os' };
+`;
+  }
 
+  function tryHostOpenExternal(uri) {
     try {
-      const opened = window.open(uri, '_blank');
-      if (opened) {
-        return { ok: true, uri, copied: false };
+      const ea = typeof window !== 'undefined' ? window.ea : null;
+      if (ea && typeof ea.openExternalUrl === 'function') {
+        ea.openExternalUrl(uri);
+        return true;
       }
     } catch {
-      // fall through
+      // Host API not available (iframe / web).
     }
+    return false;
+  }
 
+  function tryHiddenIframe(uri) {
+    if (typeof document === 'undefined') {
+      return false;
+    }
+    try {
+      const frame = document.createElement('iframe');
+      frame.setAttribute('hidden', '');
+      frame.setAttribute('aria-hidden', 'true');
+      frame.style.cssText = 'display:none;width:0;height:0;border:0;position:absolute';
+      frame.src = uri;
+      document.body.appendChild(frame);
+      setTimeout(() => {
+        if (frame.parentNode) {
+          frame.parentNode.removeChild(frame);
+        }
+      }, 2000);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function tryProtocolAnchor(uri) {
+    if (typeof document === 'undefined') {
+      return false;
+    }
     try {
       const anchor = document.createElement('a');
       anchor.href = uri;
-      anchor.target = '_blank';
+      // No target=_blank: Electron treats that as a new BrowserWindow and
+      // often fails to hand a custom protocol to the OS when the app is closed.
       anchor.rel = 'noopener noreferrer';
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      return { ok: true, uri, copied: false };
+      return true;
     } catch {
-      // fall through
+      return false;
+    }
+  }
+
+  /**
+   * Launch an `obsidian://open` URI without blocking the Super Productivity UI.
+   * Desktop (most reliable cold-start): `executeNodeScript` → Electron
+   * `shell.openExternal`, then `window.ea.openExternalUrl`.
+   * Fallback: hidden iframe / in-place protocol link (no `window.open`).
+   * @param {string} uri
+   * @param {{ executeNodeScript?: Function }|null} [api]
+   * @returns {Promise<{ok: boolean, uri: string, copied: boolean, via?: string}>}
+   */
+  async function openExternalUri(uri, api) {
+    if (!isSafeObsidianOpenUri(uri)) {
+      return { ok: false, uri: typeof uri === 'string' ? uri : '', copied: false };
+    }
+
+    if (api && typeof api.executeNodeScript === 'function') {
+      try {
+        const result = await api.executeNodeScript({
+          script: openObsidianUriScript(uri),
+          timeout: 4000,
+        });
+        if (result && result.success) {
+          return { ok: true, uri, copied: false, via: 'electron' };
+        }
+      } catch {
+        // Node bridge unavailable or consent denied — try renderer fallbacks.
+      }
+    }
+
+    if (tryHostOpenExternal(uri)) {
+      return { ok: true, uri, copied: false, via: 'ea' };
+    }
+
+    if (tryHiddenIframe(uri)) {
+      return { ok: true, uri, copied: false, via: 'iframe' };
+    }
+
+    if (tryProtocolAnchor(uri)) {
+      return { ok: true, uri, copied: false, via: 'anchor' };
     }
 
     return { ok: false, uri, copied: false };
@@ -1090,6 +1633,13 @@ return pages;
     updateVaultSettings,
     visibleProjects,
     filterPages,
+    filterBindings,
+    filterNoteTree,
+    buildNoteTree,
+    flattenVisibleTree,
+    ancestorFolderPaths,
+    debounce,
+    vaultConfigStatus,
     rankPage,
     listVaultPagesScript,
     parseNodePageResult,
@@ -1098,6 +1648,8 @@ return pages;
     isMobilePlatform,
     canBrowseVault,
     isNoteTarget,
+    isSafeObsidianOpenUri,
+    openObsidianUriScript,
     openExternalUri,
     copyText,
     t,
@@ -1105,13 +1657,14 @@ return pages;
 });
 
 /* Iframe UI for Obsidian Connector. Concatenated after core.js inside index.html.
- * Desktop: browse existing .md pages. Mobile/web: type an existing vault-relative path.
- * Never creates Obsidian pages or Super Productivity projects.
+ * Desktop: browse existing .md pages as a folder tree. Mobile/web: type an
+ * existing vault-relative path. Never creates Obsidian pages or SP projects.
  */
 (function () {
   'use strict';
 
   const Core = globalThis.ObsidianConnectorCore;
+  const SEARCH_DEBOUNCE_MS = 150;
 
   function qs(id) {
     return document.getElementById(id);
@@ -1144,10 +1697,50 @@ return pages;
       this.projects = [];
       this.context = null;
       this.pages = [];
+      this.tree = null;
+      this.pageCache = { vaultPath: '', pages: [], tree: null };
       this.selectedPage = '';
       this.pageQuery = '';
       this.pagePicked = false;
       this.lastProjectId = '';
+      this.expandedFolders = new Set();
+      this.linkedOpen = false;
+      this.linkedQuery = '';
+      this.listeners = [];
+      this.pageSearchDebounced = Core.debounce(() => {
+        this.pageQuery = qs('page-search').value;
+        this.renderPageTree();
+      }, SEARCH_DEBOUNCE_MS);
+      this.linkedSearchDebounced = Core.debounce(() => {
+        this.linkedQuery = qs('linked-search').value;
+        if (this.linkedOpen) {
+          this.renderBindings();
+        }
+      }, SEARCH_DEBOUNCE_MS);
+    }
+
+    /**
+     * Bind a listener and remember it so the panel can detach on teardown.
+     * @param {EventTarget} target
+     * @param {string} type
+     * @param {EventListener} handler
+     * @param {boolean|AddEventListenerOptions} [opts]
+     */
+    on(target, type, handler, opts) {
+      if (!target) {
+        return;
+      }
+      target.addEventListener(type, handler, opts);
+      this.listeners.push(() => target.removeEventListener(type, handler, opts));
+    }
+
+    destroy() {
+      this.pageSearchDebounced.cancel();
+      this.linkedSearchDebounced.cancel();
+      for (const off of this.listeners) {
+        off();
+      }
+      this.listeners = [];
     }
 
     t(key, fallback, params) {
@@ -1167,6 +1760,8 @@ return pages;
       this.setupHooks();
       if (this.canBrowse() && this.state.vaultPath) {
         await this.loadPages();
+      } else {
+        this.renderVaultWarning();
       }
     }
 
@@ -1175,6 +1770,7 @@ return pages;
       const mobileEntry = qs('mobile-page-entry');
       const vaultPathBlock = qs('vault-path-block');
       const loadBtn = qs('load-pages');
+      const refreshBtn = qs('refresh-pages');
       const banner = qs('platform-banner');
 
       if (this.canBrowse()) {
@@ -1182,6 +1778,11 @@ return pages;
         mobileEntry.classList.add('hidden');
         vaultPathBlock.classList.remove('hidden');
         loadBtn.classList.remove('hidden');
+        if (this.pageCache.tree) {
+          refreshBtn.classList.remove('hidden');
+        } else {
+          refreshBtn.classList.add('hidden');
+        }
         banner.textContent = this.t(
           'UI.PLATFORM_DESKTOP',
           'Desktop: load existing pages from the vault folder, then pick one. The plugin never creates a page.',
@@ -1191,6 +1792,7 @@ return pages;
         mobileEntry.classList.remove('hidden');
         vaultPathBlock.classList.add('hidden');
         loadBtn.classList.add('hidden');
+        refreshBtn.classList.add('hidden');
         banner.textContent = this.t(
           'UI.PLATFORM_MOBILE',
           'Mobile / web: enter the vault-relative path of an existing Obsidian page. Disk browsing needs the desktop app. Opening still uses obsidian://.',
@@ -1221,6 +1823,7 @@ return pages;
       );
       qs('save-vault').textContent = this.t('UI.SAVE', 'Save');
       qs('load-pages').textContent = this.t('UI.LOAD_PAGES', 'Load existing pages');
+      qs('refresh-pages').textContent = this.t('UI.REFRESH', 'Refresh');
       qs('link-heading').textContent = this.t(
         'UI.NEW_LINK',
         'Link an existing project',
@@ -1259,25 +1862,37 @@ return pages;
         'Selected page',
       );
       qs('list-heading').textContent = this.t('UI.LINKED', 'Linked projects');
+      qs('linked-search').placeholder = this.t(
+        'UI.LINKED_SEARCH',
+        'Search linked projects…',
+      );
+      qs('linked-search-label').textContent = this.t(
+        'UI.LINKED_SEARCH',
+        'Search linked projects…',
+      );
       qs('banner-open').textContent = this.t('UI.OPEN', 'Open in Obsidian');
+      this.renderLinkedCount();
     }
 
     bindEvents() {
-      qs('save-vault').addEventListener('click', () => this.saveVault());
-      qs('load-pages').addEventListener('click', () => this.loadPages());
-      qs('save-binding').addEventListener('click', () => this.saveBinding());
-      qs('project-select').addEventListener('change', () => this.onProjectChange());
-      qs('page-search').addEventListener('input', () => {
-        this.pageQuery = qs('page-search').value;
-        this.renderPageList();
-      });
-      qs('manual-page').addEventListener('input', () => {
+      this.on(qs('save-vault'), 'click', () => this.saveVault());
+      this.on(qs('load-pages'), 'click', () => this.loadPages({ force: true }));
+      this.on(qs('refresh-pages'), 'click', () => this.refreshAll());
+      this.on(qs('save-binding'), 'click', () => this.saveBinding());
+      this.on(qs('project-select'), 'change', () => this.onProjectChange());
+      this.on(qs('page-search'), 'input', () => this.pageSearchDebounced());
+      this.on(qs('manual-page'), 'input', () => {
         this.selectedPage = qs('manual-page').value.trim();
         this.pagePicked = !!this.selectedPage;
         this.renderSelectedPage();
       });
-      qs('banner-open').addEventListener('click', () => this.openCurrent());
-      qs('banner-link').addEventListener('click', () => this.prefillCurrent());
+      this.on(qs('banner-open'), 'click', () => this.openCurrent());
+      this.on(qs('banner-link'), 'click', () => this.prefillCurrent());
+      this.on(qs('linked-toggle'), 'click', () => this.toggleLinked());
+      this.on(qs('linked-search'), 'input', () => this.linkedSearchDebounced());
+      this.on(qs('page-list'), 'click', (event) => this.onPageTreeClick(event));
+      this.on(qs('bindings'), 'click', (event) => this.onBindingsClick(event));
+      this.on(document, 'click', (event) => this.onDocumentClick(event));
     }
 
     setupHooks() {
@@ -1321,6 +1936,14 @@ return pages;
       }
     }
 
+    /** Reload projects/bindings and, on desktop, the vault page tree from disk. */
+    async refreshAll() {
+      await this.refresh();
+      if (this.canBrowse()) {
+        await this.loadPages({ force: true });
+      }
+    }
+
     projectById(id) {
       return this.projects.find((project) => project.id === id) || null;
     }
@@ -1333,32 +1956,58 @@ return pages;
       qs('vault-name').value = this.state.vaultName;
       qs('vault-path').value = this.state.vaultPath;
       this.applyPlatformMode();
+      this.renderVaultWarning();
       this.renderProjectSelect();
       this.renderBanner();
-      this.renderPageList();
-      this.renderBindings();
-      this.renderSelectedPage();
+      this.renderLinkedChrome();
+      if (this.linkedOpen) {
+        this.renderBindings();
+      }
+    }
+
+    renderVaultWarning() {
+      const el = qs('vault-config-status');
+      if (!el) {
+        return;
+      }
+      const status = Core.vaultConfigStatus(this.state, {
+        requirePath: this.canBrowse(),
+      });
+      const messages = status.errors.concat(status.warnings);
+      if (!messages.length) {
+        el.textContent = '';
+        el.classList.add('hidden');
+        el.dataset.tone = '';
+        return;
+      }
+      el.textContent = messages.join(' ');
+      el.classList.remove('hidden');
+      el.dataset.tone = status.errors.length ? 'error' : 'info';
     }
 
     renderProjectSelect() {
       const select = qs('project-select');
       const previous = select.value;
       const linkedIds = new Set(this.state.bindings.map((item) => item.projectId));
-      const options = this.projects
+      const fragment = document.createDocumentFragment();
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = this.t('UI.CHOOSE_PROJECT', 'Choose an existing project…');
+      fragment.appendChild(placeholder);
+
+      this.projects
         .slice()
         .sort((a, b) => a.title.localeCompare(b.title))
-        .map((project) => {
-          const linked = linkedIds.has(project.id)
-            ? ` ${this.t('UI.ALREADY_LINKED', '(linked)')}`
-            : '';
-          return `<option value="${escapeHtml(project.id)}">${escapeHtml(
-            project.title + linked,
-          )}</option>`;
+        .forEach((project) => {
+          const option = document.createElement('option');
+          option.value = project.id;
+          option.textContent = linkedIds.has(project.id)
+            ? `${project.title} ${this.t('UI.ALREADY_LINKED', '(linked)')}`
+            : project.title;
+          fragment.appendChild(option);
         });
-      select.innerHTML =
-        `<option value="">${escapeHtml(
-          this.t('UI.CHOOSE_PROJECT', 'Choose an existing project…'),
-        )}</option>` + options.join('');
+
+      select.replaceChildren(fragment);
 
       if (previous && this.projectById(previous)) {
         select.value = previous;
@@ -1382,6 +2031,7 @@ return pages;
       const linkBtn = qs('banner-link');
       if (binding) {
         qs('banner-detail').textContent = Core.bindingTarget(binding);
+        qs('banner-detail').title = Core.bindingTarget(binding);
         openBtn.classList.remove('hidden');
         linkBtn.textContent = this.t('UI.EDIT_LINK', 'Change page');
       } else {
@@ -1389,55 +2039,126 @@ return pages;
           'UI.CURRENT_UNLINKED',
           'Not linked to an Obsidian page yet.',
         );
+        qs('banner-detail').removeAttribute('title');
         openBtn.classList.add('hidden');
         linkBtn.textContent = this.t('UI.LINK_THIS', 'Link this project');
       }
     }
 
-    renderPageList() {
+    /**
+     * Render only the visible tree rows (collapsed folders omit children).
+     * Filtering auto-expands matching branches.
+     */
+    renderPageTree() {
       const root = qs('page-list');
       if (!root || !this.canBrowse()) {
         this.renderSelectedPage();
         return;
       }
-      const project = this.selectedProject();
-      const visible = Core.filterPages(this.pages, this.pageQuery, project && project.title);
       this.renderSelectedPage();
+
       if (!this.pages.length) {
-        root.innerHTML = `<p class="empty text-muted">${escapeHtml(
+        root.replaceChildren(this.emptyNote(
           this.t(
             'UI.PAGES_EMPTY',
             'Set the vault path and click Load existing pages to list notes already in the vault.',
           ),
-        )}</p>`;
-        return;
-      }
-      if (!visible.length) {
-        root.innerHTML = `<p class="empty text-muted">${escapeHtml(
-          this.t('UI.PAGES_NONE', 'No existing pages match this search.'),
-        )}</p>`;
+        ));
         return;
       }
 
-      root.innerHTML = visible
-        .map((page) => {
-          const path = page.path || '';
-          const selected = path === this.selectedPage ? ' selected' : '';
-          const rank = Core.rankPage(path, project && project.title);
-          const match = rank >= 3 ? ' match' : '';
-          return `<button type="button" class="page-item${selected}${match}" data-page="${escapeHtml(
-            path,
-          )}" title="${escapeHtml(path)}">${escapeHtml(path)}</button>`;
-        })
-        .join('');
-
-      root.querySelectorAll('[data-page]').forEach((button) => {
-        button.addEventListener('click', () => {
-          this.selectedPage = button.getAttribute('data-page') || '';
-          this.pagePicked = true;
-          this.renderPageList();
+      const sourceTree = this.tree || Core.buildNoteTree(this.pages);
+      const { tree, expanded } = Core.filterNoteTree(sourceTree, this.pageQuery);
+      if (this.pageQuery) {
+        this.expandedFolders = new Set(expanded);
+      }
+      if (this.selectedPage) {
+        Core.ancestorFolderPaths(this.selectedPage).forEach((folder) => {
+          this.expandedFolders.add(folder);
         });
-      });
+      }
+
+      const visible = Core.flattenVisibleTree(tree, this.expandedFolders);
+      if (!visible.length) {
+        root.replaceChildren(this.emptyNote(
+          this.t('UI.PAGES_NONE', 'No existing pages match this search.'),
+        ));
+        return;
+      }
+
+      const project = this.selectedProject();
+      const fragment = document.createDocumentFragment();
+      for (const item of visible) {
+        fragment.appendChild(this.createTreeRow(item, project));
+      }
+      root.replaceChildren(fragment);
+    }
+
+    emptyNote(text) {
+      const p = document.createElement('p');
+      p.className = 'empty text-muted';
+      p.textContent = text;
+      return p;
+    }
+
+    createTreeRow(item, project) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = item.type === 'folder' ? 'tree-row tree-folder' : 'tree-row tree-file';
+      btn.style.setProperty('--depth', String(item.depth || 0));
+      btn.title = item.path;
+
+      const icon = document.createElement('span');
+      icon.className =
+        item.type === 'folder' ? 'tree-icon tree-icon-folder' : 'tree-icon tree-icon-file';
+      icon.setAttribute('aria-hidden', 'true');
+
+      const label = document.createElement('span');
+      label.className = 'tree-label';
+      label.textContent = item.type === 'folder' ? item.name : `${item.name}.md`;
+
+      if (item.type === 'folder') {
+        const isOpen = this.expandedFolders.has(item.path);
+        btn.setAttribute('data-folder', item.path);
+        btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        btn.setAttribute('role', 'treeitem');
+        if (isOpen) {
+          btn.classList.add('expanded');
+        }
+      } else {
+        btn.setAttribute('data-page', item.path);
+        btn.setAttribute('role', 'option');
+        if (item.path === this.selectedPage) {
+          btn.classList.add('selected');
+        }
+        if (Core.rankPage(item.path, project && project.title) >= 3) {
+          btn.classList.add('match');
+        }
+      }
+
+      btn.append(icon, label);
+      return btn;
+    }
+
+    onPageTreeClick(event) {
+      const list = qs('page-list');
+      const folderBtn = event.target.closest('[data-folder]');
+      if (folderBtn && list.contains(folderBtn)) {
+        const folder = folderBtn.getAttribute('data-folder');
+        if (this.expandedFolders.has(folder)) {
+          this.expandedFolders.delete(folder);
+        } else {
+          this.expandedFolders.add(folder);
+        }
+        this.renderPageTree();
+        return;
+      }
+      const pageBtn = event.target.closest('[data-page]');
+      if (pageBtn && list.contains(pageBtn)) {
+        this.selectedPage = pageBtn.getAttribute('data-page') || '';
+        this.pagePicked = true;
+        this.renderPageTree();
+      }
     }
 
     renderSelectedPage() {
@@ -1445,41 +2166,104 @@ return pages;
       if (!el) {
         return;
       }
-      el.textContent = this.pagePicked && this.selectedPage
+      const value = this.pagePicked && this.selectedPage
         ? this.selectedPage
         : this.t('UI.NO_PAGE_SELECTED', 'No page selected');
+      el.textContent = value;
+      if (this.pagePicked && this.selectedPage) {
+        el.title = this.selectedPage;
+      } else {
+        el.removeAttribute('title');
+      }
+    }
+
+    toggleLinked() {
+      this.linkedOpen = !this.linkedOpen;
+      this.renderLinkedChrome();
+      if (this.linkedOpen) {
+        this.renderBindings();
+      } else {
+        this.closeAllMenus();
+        qs('bindings').replaceChildren();
+      }
+    }
+
+    renderLinkedCount() {
+      const countEl = qs('linked-count');
+      if (!countEl) {
+        return;
+      }
+      const n = this.state.bindings.length;
+      countEl.textContent = this.t('UI.LINKED_COUNT', '({{count}})', { count: n });
+    }
+
+    renderLinkedChrome() {
+      const toggle = qs('linked-toggle');
+      const panel = qs('linked-panel');
+      this.renderLinkedCount();
+      toggle.setAttribute('aria-expanded', this.linkedOpen ? 'true' : 'false');
+      toggle.classList.toggle('open', this.linkedOpen);
+      if (this.linkedOpen) {
+        panel.classList.remove('hidden');
+      } else {
+        panel.classList.add('hidden');
+      }
     }
 
     renderBindings() {
       const root = qs('bindings');
+      if (!this.linkedOpen) {
+        root.replaceChildren();
+        return;
+      }
       if (!this.state.bindings.length) {
-        root.innerHTML = `<p class="empty text-muted">${escapeHtml(
+        root.replaceChildren(this.emptyNote(
           this.t(
             'UI.EMPTY',
             'No links yet. Choose an existing project, pick an existing Obsidian page, then click Link.',
           ),
-        )}</p>`;
+        ));
         return;
       }
 
-      root.innerHTML = this.state.bindings
-        .map((binding) => {
-          const project = this.projectById(binding.projectId);
-          const title = project
-            ? project.title
-            : this.t('UI.MISSING_PROJECT', 'Missing project ({{id}})', {
-                id: binding.projectId,
-              });
-          const page = Core.bindingTarget(binding);
-          const missingClass = project ? '' : ' text-muted';
-          return `
-            <article class="card binding" data-project-id="${escapeHtml(
-              binding.projectId,
-            )}">
+      const visible = Core.filterBindings(
+        this.state.bindings,
+        this.linkedQuery,
+        (id) => {
+          const project = this.projectById(id);
+          return project ? project.title : '';
+        },
+      );
+      if (!visible.length) {
+        root.replaceChildren(this.emptyNote(
+          this.t('UI.LINKED_NONE', 'No linked projects match this search.'),
+        ));
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      for (const binding of visible) {
+        fragment.appendChild(this.createBindingCard(binding));
+      }
+      root.replaceChildren(fragment);
+    }
+
+    createBindingCard(binding) {
+      const project = this.projectById(binding.projectId);
+      const title = project
+        ? project.title
+        : this.t('UI.MISSING_PROJECT', 'Missing project ({{id}})', {
+            id: binding.projectId,
+          });
+      const page = Core.bindingTarget(binding);
+      const article = document.createElement('article');
+      article.className = 'card binding';
+      article.setAttribute('data-project-id', binding.projectId);
+      article.innerHTML = `
               <div class="binding-head">
-                <div class="binding-title${missingClass}">
+                <div class="binding-title${project ? '' : ' text-muted'}">
                   <span class="dot"></span>
-                  <span>${escapeHtml(title)}</span>
+                  <span class="binding-name" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
                 </div>
                 <div class="menu-wrap">
                   <button
@@ -1508,32 +2292,40 @@ return pages;
                   </div>
                 </div>
               </div>
-              <div class="path text-muted">${escapeHtml(page)}</div>
+              <div class="path text-muted" title="${escapeHtml(page)}">${escapeHtml(page)}</div>
               <div class="actions">
                 <button type="button" class="primary" data-action="open">${escapeHtml(
                   this.t('UI.OPEN', 'Open in Obsidian'),
                 )}</button>
               </div>
-            </article>
           `;
-        })
-        .join('');
+      return article;
+    }
 
-      root.querySelectorAll('[data-action]').forEach((button) => {
-        button.addEventListener('click', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          const article = event.currentTarget.closest('[data-project-id]');
-          const projectId = article && article.getAttribute('data-project-id');
-          const action = event.currentTarget.getAttribute('data-action');
-          if (action === 'toggle-menu') {
-            this.toggleBindingMenu(article);
-            return;
-          }
-          this.closeAllMenus();
-          this.handleBindingAction(action, projectId);
-        });
-      });
+    onBindingsClick(event) {
+      const button = event.target.closest('[data-action]');
+      const root = qs('bindings');
+      if (!button || !root.contains(button)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const article = button.closest('[data-project-id]');
+      const projectId = article && article.getAttribute('data-project-id');
+      const action = button.getAttribute('data-action');
+      if (action === 'toggle-menu') {
+        this.toggleBindingMenu(article);
+        return;
+      }
+      this.closeAllMenus();
+      this.handleBindingAction(action, projectId);
+    }
+
+    onDocumentClick(event) {
+      if (event.target && event.target.closest && event.target.closest('.menu-wrap')) {
+        return;
+      }
+      this.closeAllMenus();
     }
 
     toggleBindingMenu(article) {
@@ -1577,7 +2369,7 @@ return pages;
           { title: project.title },
         );
       }
-      this.renderPageList();
+      this.renderPageTree();
     }
 
     prefillCurrent() {
@@ -1600,19 +2392,31 @@ return pages;
       this.render();
     }
 
+    invalidatePageCache() {
+      this.pageCache = { vaultPath: '', pages: [], tree: null };
+      this.pages = [];
+      this.tree = null;
+      this.expandedFolders = new Set();
+    }
+
     async saveVault() {
       const next = Core.updateVaultSettings(this.state, {
         vaultName: qs('vault-name').value,
         vaultPath: qs('vault-path').value,
       });
+      if (next.vaultPath !== this.pageCache.vaultPath) {
+        this.invalidatePageCache();
+      }
       await this.persist(next);
       this.setStatus(this.t('MSG.VAULT_SAVED', 'Vault settings saved.'), 'success');
+      this.renderVaultWarning();
       if (this.canBrowse() && next.vaultPath) {
-        await this.loadPages();
+        await this.loadPages({ force: true });
       }
     }
 
-    async loadPages() {
+    async loadPages(opts) {
+      const force = !!(opts && opts.force);
       if (!this.canBrowse()) {
         this.setStatus(
           this.t(
@@ -1634,6 +2438,22 @@ return pages;
           ),
           'error',
         );
+        this.renderVaultWarning();
+        this.renderPageTree();
+        return;
+      }
+
+      if (!force && this.pageCache.tree && this.pageCache.vaultPath === vaultPath) {
+        this.pages = this.pageCache.pages;
+        this.tree = this.pageCache.tree;
+        qs('refresh-pages').classList.remove('hidden');
+        this.renderPageTree();
+        this.setStatus(
+          this.t('MSG.PAGES_CACHED', 'Showing {{count}} cached pages. Click Refresh to reload.', {
+            count: this.pages.length,
+          }),
+          'info',
+        );
         return;
       }
 
@@ -1645,13 +2465,16 @@ return pages;
         });
         const parsed = Core.parseNodePageResult(result);
         if (!parsed.ok) {
-          this.pages = [];
+          this.invalidatePageCache();
           this.setStatus(parsed.error, 'error');
-          this.renderPageList();
+          this.renderPageTree();
           return;
         }
         this.pages = parsed.pages;
-        this.renderPageList();
+        this.tree = Core.buildNoteTree(parsed.pages);
+        this.pageCache = { vaultPath, pages: parsed.pages, tree: this.tree };
+        qs('refresh-pages').classList.remove('hidden');
+        this.renderPageTree();
         this.setStatus(
           this.t('MSG.PAGES_LOADED', 'Loaded {{count}} existing pages.', {
             count: this.pages.length,
@@ -1659,14 +2482,14 @@ return pages;
           'success',
         );
       } catch (error) {
-        this.pages = [];
+        this.invalidatePageCache();
         this.setStatus(
           error && error.message
             ? String(error.message)
             : this.t('MSG.PAGES_FAILED', 'Could not read existing vault pages.'),
           'error',
         );
-        this.renderPageList();
+        this.renderPageTree();
       }
     }
 
@@ -1822,7 +2645,11 @@ return pages;
         this.setStatus(this.t('MSG.OPEN_FAILED', 'Could not build the Obsidian URI.'), 'error');
         return;
       }
-      const result = Core.openExternalUri(uri);
+      const config = Core.vaultConfigStatus(this.state, { requirePath: false });
+      if (config.warnings.length && !this.state.vaultName) {
+        this.renderVaultWarning();
+      }
+      const result = await Core.openExternalUri(uri, PluginAPI);
       if (result.ok) {
         this.setStatus(
           this.t('MSG.OPENING_NOTE', 'Opening {{file}} in Obsidian…', {
@@ -1856,15 +2683,6 @@ return pages;
       }
     }
   }
-
-  document.addEventListener('click', (event) => {
-    if (event.target && event.target.closest && event.target.closest('.menu-wrap')) {
-      return;
-    }
-    document.querySelectorAll('.menu-panel').forEach((panel) => {
-      panel.classList.add('hidden');
-    });
-  });
 
   waitForPluginApi();
 })();

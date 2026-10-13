@@ -2,6 +2,26 @@
 
 All notable changes to Obsidian Connector are documented in this file.
 
+## [1.1.0] - 2026-10-13
+
+Minor bump: user-facing panel behavior changes (tree view, on-demand linked list, Refresh, cold-start open). Product invariants are unchanged — existing projects → existing pages, `obsidian://open` only.
+
+### Features
+
+- Hierarchical collapsible vault tree (folders → subfolders → `.md` files) with lazy DOM for collapsed folders
+- Linked Projects collapsed by default; expand to render cards and search by name/path (150ms debounce)
+- Manual **Refresh** reloads cached vault pages and project bindings
+- Filtering `.md` files auto-expands matching tree branches
+- Vault name/path warnings when config is missing or invalid
+- Desktop open uses Electron `shell.openExternal` via `executeNodeScript` so a closed Obsidian app can still launch (`encodeURIComponent` on URI params)
+
+### Performance
+
+- Batched DOM updates (`DocumentFragment` / `replaceChildren`)
+- Event delegation for the tree and linked-project cards; listeners are detached on teardown
+
+[1.1.0]: https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.1.0
+
 ## [1.0.0] - 2026-09-16
 
 First release.

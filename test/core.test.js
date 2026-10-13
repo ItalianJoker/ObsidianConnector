@@ -110,6 +110,174 @@ describe('obsidian URIs', () => {
     const uri = Core.buildOpenUri({ vaultName: '' }, { filePath: 'Inbox.md' });
     assert.equal(uri, 'obsidian://open?file=Inbox');
   });
+
+  it('encodeURIComponent-encodes vault and file params', () => {
+    const uri = Core.buildOpenUri(
+      { vaultName: 'Work & Home' },
+      { filePath: 'Projects/A & B?.md' },
+    );
+    assert.equal(
+      uri,
+      'obsidian://open?vault=Work%20%26%20Home&file=Projects%2FA%20%26%20B%3F',
+    );
+    assert.equal(Core.isSafeObsidianOpenUri(uri), true);
+    assert.equal(Core.isSafeObsidianOpenUri('https://evil.example'), false);
+    assert.equal(Core.isSafeObsidianOpenUri('obsidian://new?file=X'), false);
+    assert.equal(Core.isSafeObsidianOpenUri('javascript:alert(1)'), false);
+  });
+});
+
+describe('openExternalUri', () => {
+  it('hands a safe URI to executeNodeScript (Electron cold-start path)', async () => {
+    const calls = [];
+    const api = {
+      async executeNodeScript(req) {
+        calls.push(req);
+        return { success: true, result: { ok: true, via: 'electron' } };
+      },
+    };
+    const uri = Core.buildOpenUri({ vaultName: 'My Vault' }, { filePath: 'Work/A & B.md' });
+    const result = await Core.openExternalUri(uri, api);
+    assert.equal(result.ok, true);
+    assert.equal(result.via, 'electron');
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].script, /shell\.openExternal/);
+    assert.match(calls[0].script, /obsidian:\/\/open\?vault=My%20Vault&file=Work%2FA%20%26%20B/);
+    assert.match(Core.openObsidianUriScript(uri), /spawn\('open'/);
+  });
+
+  it('refuses non-obsidian URIs even when a node bridge is present', async () => {
+    let called = false;
+    const result = await Core.openExternalUri('https://evil.example', {
+      async executeNodeScript() {
+        called = true;
+        return { success: true };
+      },
+    });
+    assert.equal(result.ok, false);
+    assert.equal(called, false);
+  });
+
+  it('returns not-ok in Node when no launcher is available', async () => {
+    const uri = Core.buildOpenUri({ vaultName: 'V' }, { filePath: 'Inbox.md' });
+    const result = await Core.openExternalUri(uri, null);
+    assert.equal(result.ok, false);
+    assert.equal(result.uri, uri);
+  });
+});
+
+describe('debounce', () => {
+  it('collapses rapid calls and exposes cancel', async () => {
+    let n = 0;
+    const fn = Core.debounce(() => {
+      n += 1;
+    }, 20);
+    fn();
+    fn();
+    fn();
+    assert.equal(n, 0);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(n, 1);
+    fn();
+    fn.cancel();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(n, 1);
+  });
+});
+
+describe('note tree', () => {
+  const pages = [
+    'Inbox.md',
+    'Projects/Client/Alpha.md',
+    'Projects/Website.md',
+    'Work/Elmec.md',
+  ];
+
+  it('parses vault-relative paths into folders then files', () => {
+    const tree = Core.buildNoteTree(pages);
+    const names = tree.children.map((node) => `${node.type}:${node.name}`);
+    assert.deepEqual(names, ['folder:Projects', 'folder:Work', 'file:Inbox']);
+    const projects = tree.children[0];
+    assert.equal(projects.children[0].type, 'folder');
+    assert.equal(projects.children[0].name, 'Client');
+    assert.equal(projects.children[0].children[0].path, 'Projects/Client/Alpha.md');
+    assert.equal(projects.children[1].path, 'Projects/Website.md');
+  });
+
+  it('omits children of collapsed folders from visible rows', () => {
+    const tree = Core.buildNoteTree(pages);
+    const collapsed = Core.flattenVisibleTree(tree, new Set());
+    assert.deepEqual(
+      collapsed.map((row) => row.path),
+      ['Projects', 'Work', 'Inbox.md'],
+    );
+    const opened = Core.flattenVisibleTree(tree, new Set(['Projects']));
+    assert.ok(opened.some((row) => row.path === 'Projects/Website.md'));
+    assert.ok(opened.some((row) => row.path === 'Projects/Client'));
+    assert.equal(
+      opened.some((row) => row.path === 'Projects/Client/Alpha.md'),
+      false,
+    );
+  });
+
+  it('auto-expands matching tree branches when filtering', () => {
+    const tree = Core.buildNoteTree(pages);
+    const { tree: filtered, expanded } = Core.filterNoteTree(tree, 'Alpha');
+    assert.equal(expanded.has('Projects'), true);
+    assert.equal(expanded.has('Projects/Client'), true);
+    const rows = Core.flattenVisibleTree(filtered, expanded);
+    assert.ok(rows.some((row) => row.path === 'Projects/Client/Alpha.md'));
+    assert.equal(
+      rows.some((row) => row.path === 'Work/Elmec.md'),
+      false,
+    );
+  });
+
+  it('lists ancestor folders of a selected file', () => {
+    assert.deepEqual(Core.ancestorFolderPaths('Projects/Client/Alpha.md'), [
+      'Projects',
+      'Projects/Client',
+    ]);
+  });
+});
+
+describe('filterBindings', () => {
+  it('filters linked projects by title or path', () => {
+    const bindings = [
+      { projectId: 'p1', filePath: 'Work/Elmec.md' },
+      { projectId: 'p2', filePath: 'Projects/Website.md' },
+    ];
+    const titles = { p1: 'Elmec', p2: 'Website' };
+    const byTitle = Core.filterBindings(bindings, 'web', (id) => titles[id]);
+    assert.deepEqual(
+      byTitle.map((b) => b.projectId),
+      ['p2'],
+    );
+    const byPath = Core.filterBindings(bindings, 'work/', (id) => titles[id]);
+    assert.deepEqual(
+      byPath.map((b) => b.projectId),
+      ['p1'],
+    );
+  });
+});
+
+describe('vaultConfigStatus', () => {
+  it('flags a missing desktop vault path and an empty vault name', () => {
+    const missing = Core.vaultConfigStatus({ vaultName: '', vaultPath: 'relative' }, {
+      requirePath: true,
+    });
+    assert.equal(missing.ok, false);
+    assert.equal(missing.errors.length, 1);
+    assert.equal(missing.warnings.length, 1);
+
+    const ok = Core.vaultConfigStatus(
+      { vaultName: 'Work', vaultPath: '/home/you/Vault' },
+      { requirePath: true },
+    );
+    assert.equal(ok.ok, true);
+    assert.deepEqual(ok.errors, []);
+    assert.deepEqual(ok.warnings, []);
+  });
 });
 
 describe('page ranking', () => {

@@ -49,6 +49,10 @@ describe('plugin package', () => {
     assert.match(html, /id="page-list"/);
     assert.match(html, /id="manual-page"/);
     assert.match(html, /id="load-pages"/);
+    assert.match(html, /id="refresh-pages"/);
+    assert.match(html, /id="linked-toggle"/);
+    assert.match(html, /id="linked-search"/);
+    assert.match(html, /role="tree"/);
     assert.match(html, /never creates a new page/i);
     assert.doesNotMatch(html, /id="suggest-path"/);
     assert.doesNotMatch(html, /id="create-note"/);

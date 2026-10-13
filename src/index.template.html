@@ -65,7 +65,9 @@
         <div class="row">
           <button id="save-vault" type="button" class="primary">Save</button>
           <button id="load-pages" type="button">Load existing pages</button>
+          <button id="refresh-pages" type="button" class="hidden">Refresh</button>
         </div>
+        <p id="vault-config-status" class="hint hidden" role="status"></p>
       </section>
 
       <section class="card">
@@ -93,7 +95,7 @@
           <p id="page-hint" class="hint text-muted">
             Choose a page that already exists in the vault. Nothing new is created.
           </p>
-          <div id="page-list" class="page-list" role="listbox" aria-label="Existing Obsidian pages"></div>
+          <div id="page-list" class="page-list page-tree" role="tree" aria-label="Existing Obsidian pages"></div>
         </div>
 
         <div id="mobile-page-entry" class="hidden">
@@ -122,9 +124,33 @@
         </div>
       </section>
 
-      <section>
-        <h2 id="list-heading">Linked projects</h2>
-        <div id="bindings" class="bindings"></div>
+      <section class="card linked-card">
+        <button
+          type="button"
+          id="linked-toggle"
+          class="section-toggle"
+          aria-expanded="false"
+          aria-controls="linked-panel"
+        >
+          <span class="section-toggle-main">
+            <span id="list-heading">Linked projects</span>
+            <span id="linked-count" class="text-muted">(0)</span>
+          </span>
+          <span class="chevron" aria-hidden="true"></span>
+        </button>
+        <div id="linked-panel" class="linked-panel hidden">
+          <div class="field">
+            <label id="linked-search-label" class="sr-only" for="linked-search">Search linked projects…</label>
+            <input
+              id="linked-search"
+              type="search"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Search linked projects…"
+            />
+          </div>
+          <div id="bindings" class="bindings"></div>
+        </div>
       </section>
     </div>
 

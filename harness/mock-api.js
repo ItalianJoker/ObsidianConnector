@@ -13,7 +13,9 @@
   ];
 
   const vaultPages = [
+    { path: 'Inbox.md', name: 'Inbox' },
     { path: 'Personal/Journal.md', name: 'Journal' },
+    { path: 'Projects/Client/Alpha.md', name: 'Alpha' },
     { path: 'Projects/Thesis.md', name: 'Thesis' },
     { path: 'Projects/Website.md', name: 'Website' },
     { path: 'Work/Elmec.md', name: 'Elmec' },

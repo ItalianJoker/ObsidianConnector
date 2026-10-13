@@ -1,10 +1,10 @@
 {
   "id": "obsidian-connector",
   "name": "Obsidian Connector",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "manifestVersion": 1,
   "minSupVersion": "14.0.0",
-  "description": "Link Super Productivity projects to existing Obsidian pages. Works on desktop and mobile; never creates a new page.",
+  "description": "Link Super Productivity projects to existing Obsidian pages. Vault folder tree, on-demand linked-project search, desktop + mobile. Never creates a new page.",
   "author": "Luca",
   "homepage": "https://github.com/ItalianJoker/ObsidianConnector",
   "icon": "icon.svg",
