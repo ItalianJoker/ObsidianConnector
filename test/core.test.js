@@ -137,7 +137,7 @@ describe('openExternalUri', () => {
       },
     };
     const uri = Core.buildOpenUri({ vaultName: 'My Vault' }, { filePath: 'Work/A & B.md' });
-    const result = await Core.openExternalUri(uri, api);
+    const result = await Core.openExternalUri(uri, api, { retry: false });
     assert.equal(result.ok, true);
     assert.equal(result.via, 'electron');
     assert.equal(calls.length, 1);
@@ -160,9 +160,33 @@ describe('openExternalUri', () => {
 
   it('returns not-ok in Node when no launcher is available', async () => {
     const uri = Core.buildOpenUri({ vaultName: 'V' }, { filePath: 'Inbox.md' });
-    const result = await Core.openExternalUri(uri, null);
+    const result = await Core.openExternalUri(uri, null, { retry: false });
     assert.equal(result.ok, false);
     assert.equal(result.uri, uri);
+  });
+
+  it('retries the same encoded URI once after launch without blocking', async () => {
+    const calls = [];
+    const api = {
+      async executeNodeScript(req) {
+        calls.push(req.script);
+        return { success: true, result: { ok: true, via: 'electron' } };
+      },
+    };
+    const uri = Core.buildOpenUri(
+      { vaultName: 'Work & Home' },
+      { filePath: 'Projects/A & B.md' },
+    );
+    const started = Date.now();
+    const result = await Core.openExternalUri(uri, api, { retryDelayMs: 20 });
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 1);
+    assert.ok(Date.now() - started < 100);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0], calls[1]);
+    assert.match(calls[1], /obsidian:\/\/open\?vault=Work%20%26%20Home&file=Projects%2FA%20%26%20B/);
+    Core.cancelScheduledOpenRetry();
   });
 });
 

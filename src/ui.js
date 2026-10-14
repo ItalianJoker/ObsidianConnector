@@ -145,11 +145,13 @@
     applyStaticText() {
       document.title = this.t('PLUGIN.NAME', 'Obsidian Connector');
       qs('title').textContent = this.t('PLUGIN.NAME', 'Obsidian Connector');
+      qs('title').title = qs('title').textContent;
       qs('lede').textContent = this.t(
         'UI.LEDE',
         'Pick an existing Super Productivity project and link it to an existing page in your Obsidian vault. The plugin never creates a new page.',
       );
       qs('vault-heading').textContent = this.t('UI.VAULT', 'Obsidian vault');
+      qs('vault-heading').title = qs('vault-heading').textContent;
       qs('vault-name-label').textContent = this.t('UI.VAULT_NAME', 'Vault name');
       qs('vault-name-hint').textContent = this.t(
         'UI.VAULT_NAME_HINT',
@@ -170,6 +172,7 @@
         'UI.NEW_LINK',
         'Link an existing project',
       );
+      qs('link-heading').title = qs('link-heading').textContent;
       qs('project-label').textContent = this.t(
         'UI.PROJECT',
         'Super Productivity project',
@@ -204,6 +207,7 @@
         'Selected page',
       );
       qs('list-heading').textContent = this.t('UI.LINKED', 'Linked projects');
+      qs('list-heading').title = qs('list-heading').textContent;
       qs('linked-search').placeholder = this.t(
         'UI.LINKED_SEARCH',
         'Search linked projects…',
@@ -222,7 +226,10 @@
       this.on(qs('refresh-pages'), 'click', () => this.refreshAll());
       this.on(qs('save-binding'), 'click', () => this.saveBinding());
       this.on(qs('project-select'), 'change', () => this.onProjectChange());
-      this.on(qs('page-search'), 'input', () => this.pageSearchDebounced());
+      this.on(qs('page-search'), 'input', () => {
+        qs('page-search').title = qs('page-search').value;
+        this.pageSearchDebounced();
+      });
       this.on(qs('manual-page'), 'input', () => {
         this.selectedPage = qs('manual-page').value.trim();
         this.pagePicked = !!this.selectedPage;
@@ -231,7 +238,10 @@
       this.on(qs('banner-open'), 'click', () => this.openCurrent());
       this.on(qs('banner-link'), 'click', () => this.prefillCurrent());
       this.on(qs('linked-toggle'), 'click', () => this.toggleLinked());
-      this.on(qs('linked-search'), 'input', () => this.linkedSearchDebounced());
+      this.on(qs('linked-search'), 'input', () => {
+        qs('linked-search').title = qs('linked-search').value;
+        this.linkedSearchDebounced();
+      });
       this.on(qs('page-list'), 'click', (event) => this.onPageTreeClick(event));
       this.on(qs('bindings'), 'click', (event) => this.onBindingsClick(event));
       this.on(document, 'click', (event) => this.onDocumentClick(event));
@@ -296,7 +306,9 @@
 
     render() {
       qs('vault-name').value = this.state.vaultName;
+      qs('vault-name').title = this.state.vaultName;
       qs('vault-path').value = this.state.vaultPath;
+      qs('vault-path').title = this.state.vaultPath;
       this.applyPlatformMode();
       this.renderVaultWarning();
       this.renderProjectSelect();
@@ -356,6 +368,8 @@
       } else if (this.context && this.context.type === 'PROJECT') {
         select.value = this.context.id;
       }
+      const chosen = select.selectedOptions && select.selectedOptions[0];
+      select.title = chosen ? chosen.textContent : '';
       this.onProjectChange();
     }
 
@@ -369,6 +383,7 @@
       banner.classList.remove('hidden');
       const binding = Core.getBinding(this.state, ctx.id);
       qs('banner-title').textContent = ctx.title;
+      qs('banner-title').title = ctx.title;
       const openBtn = qs('banner-open');
       const linkBtn = qs('banner-link');
       if (binding) {
