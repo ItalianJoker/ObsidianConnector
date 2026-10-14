@@ -5,16 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Obsidian Connector</title>
     <style>
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html,
 body {
   margin: 0;
   min-height: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 button,
 input,
 select {
   font: inherit;
+  max-width: 100%;
+  min-width: 0;
 }
 
 button {
@@ -24,6 +34,9 @@ button {
   color: inherit;
   border-radius: 6px;
   padding: 6px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 button.primary {
@@ -45,6 +58,8 @@ select {
   color: inherit;
   border-radius: 6px;
   padding: 8px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .card {
@@ -54,6 +69,9 @@ select {
   box-shadow: var(--whiteframe-shadow-1dp, 0 1px 3px rgba(0, 0, 0, 0.08));
   padding: var(--s2, 16px);
   margin-bottom: var(--s2, 16px);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .text-muted {
@@ -70,19 +88,38 @@ body {
 .wrap {
   max-width: 720px;
   margin: 0 auto;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .header {
   margin-bottom: var(--s2, 16px);
 }
 
+.header h1,
+.card h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lede,
+.hint,
+.status,
+.platform-banner {
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.hint,
+.platform-banner {
+  margin: 0 0 var(--s, 8px);
+}
+
 .header h1 {
   margin: 0 0 var(--s-quarter, 4px);
   font-size: 1.35rem;
-}
-
-.lede {
-  margin: 0;
 }
 
 .card h2 {
@@ -100,10 +137,10 @@ body {
 .field label {
   font-size: 0.85em;
   color: var(--text-color-muted, #777);
+  overflow-wrap: anywhere;
 }
 
 .hint {
-  margin: 0 0 var(--s, 8px);
   font-size: 0.8em;
 }
 
@@ -112,6 +149,8 @@ body {
   flex-wrap: wrap;
   gap: var(--s, 8px);
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .banner {
@@ -123,8 +162,19 @@ body {
   border-left: 3px solid var(--c-primary, #5b7fff);
 }
 
-.banner strong {
+.banner-text {
+  min-width: 0;
+  flex: 1 1 140px;
+  overflow: hidden;
+}
+
+.banner strong,
+#banner-title,
+#banner-detail {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bindings {
@@ -144,6 +194,9 @@ body {
   align-items: center;
   gap: var(--s-half, 6px);
   font-weight: 600;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .dot {
@@ -209,6 +262,8 @@ body {
   border-radius: 6px;
   margin: 0 0 var(--s, 8px);
   background: var(--bg, #fff);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .page-list .empty {
@@ -227,8 +282,9 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85em;
   padding: 8px 12px;
-  padding-left: calc(10px + (var(--depth, 0) * 16px));
+  padding-left: calc(10px + min(var(--depth, 0) * 16px, 80px));
   min-height: 36px;
+  width: 100%;
   max-width: 100%;
   overflow: hidden;
 }
@@ -309,11 +365,20 @@ body {
   align-items: baseline;
   gap: 8px;
   min-width: 0;
+  overflow: hidden;
+}
+
+.section-toggle-main #list-heading,
+#linked-count {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .section-toggle-main #list-heading {
   font-size: 1.05rem;
   font-weight: 600;
+  min-width: 0;
 }
 
 .chevron {
@@ -344,18 +409,27 @@ body {
 }
 
 .selected-page-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   margin: 0 0 var(--s, 8px);
   font-size: 0.85em;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.selected-page-row #selected-page-label {
+  flex: 0 0 auto;
 }
 
 .selected-page-row code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  display: inline-block;
-  max-width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: bottom;
 }
 
 .binding-head {
@@ -383,7 +457,8 @@ body {
   right: 0;
   top: 100%;
   z-index: 5;
-  min-width: 180px;
+  min-width: 160px;
+  max-width: min(240px, calc(100% + 48px));
   display: flex;
   flex-direction: column;
   background: var(--card-bg, #fff);
@@ -400,6 +475,9 @@ body {
   border-radius: 6px;
   padding: 10px 12px;
   min-height: 44px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .menu-panel button:hover,
@@ -445,7 +523,7 @@ body {
       <p id="platform-banner" class="hint text-muted platform-banner"></p>
 
       <section id="current-banner" class="card banner hidden">
-        <div>
+        <div class="banner-text">
           <strong id="banner-title"></strong>
           <span id="banner-detail" class="text-muted"></span>
         </div>
@@ -1503,16 +1581,24 @@ return { ok: true, via: 'os' };
     }
   }
 
+  /** Delay before re-sending `obsidian://open` so a cold-started app can take the file. */
+  const OPEN_RETRY_DELAY_MS = 2200;
+  let pendingOpenRetry = 0;
+
+  function cancelScheduledOpenRetry() {
+    if (pendingOpenRetry) {
+      clearTimeout(pendingOpenRetry);
+      pendingOpenRetry = 0;
+    }
+  }
+
   /**
-   * Launch an `obsidian://open` URI without blocking the Super Productivity UI.
-   * Desktop (most reliable cold-start): `executeNodeScript` → Electron
-   * `shell.openExternal`, then `window.ea.openExternalUrl`.
-   * Fallback: hidden iframe / in-place protocol link (no `window.open`).
+   * Fire the URI once. Does not schedule a retry.
    * @param {string} uri
    * @param {{ executeNodeScript?: Function }|null} [api]
    * @returns {Promise<{ok: boolean, uri: string, copied: boolean, via?: string}>}
    */
-  async function openExternalUri(uri, api) {
+  async function dispatchOpenUri(uri, api) {
     if (!isSafeObsidianOpenUri(uri)) {
       return { ok: false, uri: typeof uri === 'string' ? uri : '', copied: false };
     }
@@ -1544,6 +1630,36 @@ return { ok: true, via: 'os' };
     }
 
     return { ok: false, uri, copied: false };
+  }
+
+  function scheduleOpenRetry(uri, api, delayMs) {
+    cancelScheduledOpenRetry();
+    const wait = typeof delayMs === 'number' && delayMs >= 0 ? delayMs : OPEN_RETRY_DELAY_MS;
+    pendingOpenRetry = setTimeout(() => {
+      pendingOpenRetry = 0;
+      dispatchOpenUri(uri, api);
+    }, wait);
+  }
+
+  /**
+   * Launch an `obsidian://open` URI without blocking the Super Productivity UI.
+   * Desktop (most reliable cold-start): `executeNodeScript` → Electron
+   * `shell.openExternal`, then `window.ea.openExternalUrl`.
+   * Fallback: hidden iframe / in-place protocol link (no `window.open`).
+   * After a successful first launch, re-sends the same encoded URI once
+   * (default 2200ms) so a just-started Obsidian instance opens the file.
+   * @param {string} uri
+   * @param {{ executeNodeScript?: Function }|null} [api]
+   * @param {{ retry?: boolean, retryDelayMs?: number }} [options]
+   * @returns {Promise<{ok: boolean, uri: string, copied: boolean, via?: string}>}
+   */
+  async function openExternalUri(uri, api, options) {
+    const retry = !options || options.retry !== false;
+    const result = await dispatchOpenUri(uri, api);
+    if (result.ok && retry) {
+      scheduleOpenRetry(uri, api, options && options.retryDelayMs);
+    }
+    return result;
   }
 
   async function copyText(text) {
@@ -1650,6 +1766,9 @@ return { ok: true, via: 'os' };
     isNoteTarget,
     isSafeObsidianOpenUri,
     openObsidianUriScript,
+    OPEN_RETRY_DELAY_MS,
+    cancelScheduledOpenRetry,
+    dispatchOpenUri,
     openExternalUri,
     copyText,
     t,
@@ -1803,11 +1922,13 @@ return { ok: true, via: 'os' };
     applyStaticText() {
       document.title = this.t('PLUGIN.NAME', 'Obsidian Connector');
       qs('title').textContent = this.t('PLUGIN.NAME', 'Obsidian Connector');
+      qs('title').title = qs('title').textContent;
       qs('lede').textContent = this.t(
         'UI.LEDE',
         'Pick an existing Super Productivity project and link it to an existing page in your Obsidian vault. The plugin never creates a new page.',
       );
       qs('vault-heading').textContent = this.t('UI.VAULT', 'Obsidian vault');
+      qs('vault-heading').title = qs('vault-heading').textContent;
       qs('vault-name-label').textContent = this.t('UI.VAULT_NAME', 'Vault name');
       qs('vault-name-hint').textContent = this.t(
         'UI.VAULT_NAME_HINT',
@@ -1828,6 +1949,7 @@ return { ok: true, via: 'os' };
         'UI.NEW_LINK',
         'Link an existing project',
       );
+      qs('link-heading').title = qs('link-heading').textContent;
       qs('project-label').textContent = this.t(
         'UI.PROJECT',
         'Super Productivity project',
@@ -1862,6 +1984,7 @@ return { ok: true, via: 'os' };
         'Selected page',
       );
       qs('list-heading').textContent = this.t('UI.LINKED', 'Linked projects');
+      qs('list-heading').title = qs('list-heading').textContent;
       qs('linked-search').placeholder = this.t(
         'UI.LINKED_SEARCH',
         'Search linked projects…',
@@ -1880,7 +2003,10 @@ return { ok: true, via: 'os' };
       this.on(qs('refresh-pages'), 'click', () => this.refreshAll());
       this.on(qs('save-binding'), 'click', () => this.saveBinding());
       this.on(qs('project-select'), 'change', () => this.onProjectChange());
-      this.on(qs('page-search'), 'input', () => this.pageSearchDebounced());
+      this.on(qs('page-search'), 'input', () => {
+        qs('page-search').title = qs('page-search').value;
+        this.pageSearchDebounced();
+      });
       this.on(qs('manual-page'), 'input', () => {
         this.selectedPage = qs('manual-page').value.trim();
         this.pagePicked = !!this.selectedPage;
@@ -1889,7 +2015,10 @@ return { ok: true, via: 'os' };
       this.on(qs('banner-open'), 'click', () => this.openCurrent());
       this.on(qs('banner-link'), 'click', () => this.prefillCurrent());
       this.on(qs('linked-toggle'), 'click', () => this.toggleLinked());
-      this.on(qs('linked-search'), 'input', () => this.linkedSearchDebounced());
+      this.on(qs('linked-search'), 'input', () => {
+        qs('linked-search').title = qs('linked-search').value;
+        this.linkedSearchDebounced();
+      });
       this.on(qs('page-list'), 'click', (event) => this.onPageTreeClick(event));
       this.on(qs('bindings'), 'click', (event) => this.onBindingsClick(event));
       this.on(document, 'click', (event) => this.onDocumentClick(event));
@@ -1954,7 +2083,9 @@ return { ok: true, via: 'os' };
 
     render() {
       qs('vault-name').value = this.state.vaultName;
+      qs('vault-name').title = this.state.vaultName;
       qs('vault-path').value = this.state.vaultPath;
+      qs('vault-path').title = this.state.vaultPath;
       this.applyPlatformMode();
       this.renderVaultWarning();
       this.renderProjectSelect();
@@ -2014,6 +2145,8 @@ return { ok: true, via: 'os' };
       } else if (this.context && this.context.type === 'PROJECT') {
         select.value = this.context.id;
       }
+      const chosen = select.selectedOptions && select.selectedOptions[0];
+      select.title = chosen ? chosen.textContent : '';
       this.onProjectChange();
     }
 
@@ -2027,6 +2160,7 @@ return { ok: true, via: 'os' };
       banner.classList.remove('hidden');
       const binding = Core.getBinding(this.state, ctx.id);
       qs('banner-title').textContent = ctx.title;
+      qs('banner-title').title = ctx.title;
       const openBtn = qs('banner-open');
       const linkBtn = qs('banner-link');
       if (binding) {

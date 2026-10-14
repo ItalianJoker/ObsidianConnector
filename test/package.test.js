@@ -53,6 +53,10 @@ describe('plugin package', () => {
     assert.match(html, /id="linked-toggle"/);
     assert.match(html, /id="linked-search"/);
     assert.match(html, /role="tree"/);
+    assert.match(html, /class="banner-text"/);
+    const css = fs.readFileSync(path.join(root, 'src/styles.css'), 'utf8');
+    assert.match(css, /overflow-x:\s*hidden/);
+    assert.match(css, /text-overflow:\s*ellipsis/);
     assert.match(html, /never creates a new page/i);
     assert.doesNotMatch(html, /id="suggest-path"/);
     assert.doesNotMatch(html, /id="create-note"/);

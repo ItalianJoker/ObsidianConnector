@@ -923,16 +923,24 @@ return { ok: true, via: 'os' };
     }
   }
 
+  /** Delay before re-sending `obsidian://open` so a cold-started app can take the file. */
+  const OPEN_RETRY_DELAY_MS = 2200;
+  let pendingOpenRetry = 0;
+
+  function cancelScheduledOpenRetry() {
+    if (pendingOpenRetry) {
+      clearTimeout(pendingOpenRetry);
+      pendingOpenRetry = 0;
+    }
+  }
+
   /**
-   * Launch an `obsidian://open` URI without blocking the Super Productivity UI.
-   * Desktop (most reliable cold-start): `executeNodeScript` → Electron
-   * `shell.openExternal`, then `window.ea.openExternalUrl`.
-   * Fallback: hidden iframe / in-place protocol link (no `window.open`).
+   * Fire the URI once. Does not schedule a retry.
    * @param {string} uri
    * @param {{ executeNodeScript?: Function }|null} [api]
    * @returns {Promise<{ok: boolean, uri: string, copied: boolean, via?: string}>}
    */
-  async function openExternalUri(uri, api) {
+  async function dispatchOpenUri(uri, api) {
     if (!isSafeObsidianOpenUri(uri)) {
       return { ok: false, uri: typeof uri === 'string' ? uri : '', copied: false };
     }
@@ -964,6 +972,36 @@ return { ok: true, via: 'os' };
     }
 
     return { ok: false, uri, copied: false };
+  }
+
+  function scheduleOpenRetry(uri, api, delayMs) {
+    cancelScheduledOpenRetry();
+    const wait = typeof delayMs === 'number' && delayMs >= 0 ? delayMs : OPEN_RETRY_DELAY_MS;
+    pendingOpenRetry = setTimeout(() => {
+      pendingOpenRetry = 0;
+      dispatchOpenUri(uri, api);
+    }, wait);
+  }
+
+  /**
+   * Launch an `obsidian://open` URI without blocking the Super Productivity UI.
+   * Desktop (most reliable cold-start): `executeNodeScript` → Electron
+   * `shell.openExternal`, then `window.ea.openExternalUrl`.
+   * Fallback: hidden iframe / in-place protocol link (no `window.open`).
+   * After a successful first launch, re-sends the same encoded URI once
+   * (default 2200ms) so a just-started Obsidian instance opens the file.
+   * @param {string} uri
+   * @param {{ executeNodeScript?: Function }|null} [api]
+   * @param {{ retry?: boolean, retryDelayMs?: number }} [options]
+   * @returns {Promise<{ok: boolean, uri: string, copied: boolean, via?: string}>}
+   */
+  async function openExternalUri(uri, api, options) {
+    const retry = !options || options.retry !== false;
+    const result = await dispatchOpenUri(uri, api);
+    if (result.ok && retry) {
+      scheduleOpenRetry(uri, api, options && options.retryDelayMs);
+    }
+    return result;
   }
 
   async function copyText(text) {
@@ -1070,6 +1108,9 @@ return { ok: true, via: 'os' };
     isNoteTarget,
     isSafeObsidianOpenUri,
     openObsidianUriScript,
+    OPEN_RETRY_DELAY_MS,
+    cancelScheduledOpenRetry,
+    dispatchOpenUri,
     openExternalUri,
     copyText,
     t,
