@@ -20,16 +20,28 @@
       .replace(/"/g, '&quot;');
   }
 
-  function waitForPluginApi() {
+  function waitForPluginApi(started) {
+    const startAt = started || Date.now();
     if (typeof PluginAPI !== 'undefined' && Core) {
-      start();
+      startUi();
       return;
     }
-    setTimeout(waitForPluginApi, 50);
+    if (Date.now() - startAt > 10000) {
+      const el = document.getElementById('status');
+      if (el) {
+        el.textContent = 'Could not load Super Productivity PluginAPI.';
+        el.dataset.tone = 'error';
+      }
+      return;
+    }
+    setTimeout(() => waitForPluginApi(startAt), 50);
   }
 
-  async function start() {
+  async function startUi() {
     const ui = new ConnectorUi();
+    const teardown = () => ui.destroy();
+    window.addEventListener('pagehide', teardown);
+    window.addEventListener('beforeunload', teardown);
     await ui.init();
   }
 
@@ -49,6 +61,12 @@
       this.linkedOpen = false;
       this.linkedQuery = '';
       this.listeners = [];
+      this.busy = false;
+      this.hooksBound = false;
+      this.destroyed = false;
+      this.refreshDebounced = Core.debounce(() => {
+        this.refresh({ passive: true });
+      }, SEARCH_DEBOUNCE_MS);
       this.pageSearchDebounced = Core.debounce(() => {
         this.pageQuery = qs('page-search').value;
         this.renderPageTree();
@@ -77,8 +95,16 @@
     }
 
     destroy() {
+      if (this.destroyed) {
+        return;
+      }
+      this.destroyed = true;
       this.pageSearchDebounced.cancel();
       this.linkedSearchDebounced.cancel();
+      this.refreshDebounced.cancel();
+      if (Core.cancelScheduledOpenRetry) {
+        Core.cancelScheduledOpenRetry();
+      }
       for (const off of this.listeners) {
         off();
       }
@@ -101,10 +127,11 @@
       await this.refresh();
       this.setupHooks();
       if (this.canBrowse() && this.state.vaultPath) {
-        await this.loadPages();
+        await this.loadPages({ snack: false });
       } else {
         this.renderVaultWarning();
       }
+      this.updateLinkEnabled();
     }
 
     applyPlatformMode() {
@@ -140,6 +167,15 @@
           'Mobile / web: enter the vault-relative path of an existing Obsidian page. Disk browsing needs the desktop app. Opening still uses obsidian://.',
         );
       }
+      const mobileHint = qs('mobile-unverified');
+      if (mobileHint) {
+        if (this.canBrowse()) {
+          mobileHint.classList.add('hidden');
+        } else {
+          mobileHint.classList.remove('hidden');
+        }
+      }
+      this.updateLinkEnabled();
     }
 
     applyStaticText() {
@@ -193,6 +229,13 @@
         'UI.PAGE_SEARCH',
         'Search existing pages…',
       );
+      const mobileHint = qs('mobile-unverified');
+      if (mobileHint) {
+        mobileHint.textContent = this.t(
+          'UI.MOBILE_UNVERIFIED',
+          'This path is not checked against the vault disk. The note must already exist — the plugin cannot create it.',
+        );
+      }
       qs('manual-page-label').textContent = this.t(
         'UI.MANUAL_PAGE',
         'Existing page path',
@@ -221,10 +264,26 @@
     }
 
     bindEvents() {
-      this.on(qs('save-vault'), 'click', () => this.saveVault());
-      this.on(qs('load-pages'), 'click', () => this.loadPages({ force: true }));
-      this.on(qs('refresh-pages'), 'click', () => this.refreshAll());
-      this.on(qs('save-binding'), 'click', () => this.saveBinding());
+      this.on(qs('save-vault'), 'click', () => {
+        if (!this.busy) {
+          this.saveVault();
+        }
+      });
+      this.on(qs('load-pages'), 'click', () => {
+        if (!this.busy) {
+          this.loadPages({ force: true });
+        }
+      });
+      this.on(qs('refresh-pages'), 'click', () => {
+        if (!this.busy) {
+          this.refreshAll();
+        }
+      });
+      this.on(qs('save-binding'), 'click', () => {
+        if (!this.busy) {
+          this.saveBinding();
+        }
+      });
       this.on(qs('project-select'), 'change', () => this.onProjectChange());
       this.on(qs('page-search'), 'input', () => {
         qs('page-search').title = qs('page-search').value;
@@ -248,8 +307,11 @@
     }
 
     setupHooks() {
+      if (this.hooksBound) {
+        return;
+      }
+      this.hooksBound = true;
       const hooks = PluginAPI.Hooks || {};
-      const refresh = () => this.refresh();
       [
         hooks.PERSISTED_DATA_CHANGED,
         hooks.PROJECT_LIST_UPDATE,
@@ -259,14 +321,15 @@
         .filter(Boolean)
         .forEach((hook) => {
           try {
-            PluginAPI.registerHook(hook, refresh);
+            PluginAPI.registerHook(hook, this.refreshDebounced);
           } catch {
             // Older hosts may reject unknown hooks.
           }
         });
     }
 
-    async refresh() {
+    async refresh(opts) {
+      const passive = !!(opts && opts.passive);
       try {
         const [raw, projects, context] = await Promise.all([
           PluginAPI.loadSyncedData(),
@@ -283,17 +346,78 @@
         this.setStatus(
           this.t('MSG.LOAD_ERROR', 'Could not load plugin data.'),
           'error',
+          { snack: !passive },
         );
         console.error(error);
       }
     }
 
+    setBusy(busy) {
+      this.busy = !!busy;
+      ['save-vault', 'load-pages', 'refresh-pages'].forEach((id) => {
+        const el = qs(id);
+        if (!el) {
+          return;
+        }
+        el.disabled = this.busy;
+        el.setAttribute('aria-busy', this.busy ? 'true' : 'false');
+      });
+      this.updateLinkEnabled();
+    }
+
+    async withBusy(fn) {
+      if (this.busy) {
+        return;
+      }
+      this.setBusy(true);
+      try {
+        return await fn();
+      } finally {
+        this.setBusy(false);
+      }
+    }
+
+    updateLinkEnabled() {
+      const btn = qs('save-binding');
+      if (!btn) {
+        return;
+      }
+      const desktopBlocked = this.canBrowse() && !this.pages.length;
+      btn.disabled = this.busy || desktopBlocked;
+      btn.title = desktopBlocked
+        ? this.t(
+            'MSG.DESKTOP_LOAD_REQUIRED',
+            'Load existing pages from the vault before linking. The plugin cannot create a new Obsidian page.',
+          )
+        : this.t('UI.LINK', 'Link to selected page');
+    }
+
+    mapVaultError(parsedOrError) {
+      const raw =
+        parsedOrError && typeof parsedOrError === 'object' && parsedOrError.error
+          ? parsedOrError.error
+          : parsedOrError;
+      const code = parsedOrError && parsedOrError.code;
+      if (code === 'VAULT_NOT_FOUND' || /vault folder not found/i.test(String(raw || ''))) {
+        return this.t(
+          'MSG.VAULT_NOT_FOUND',
+          'Vault folder not found. Check the path and allow file access.',
+        );
+      }
+      if (code === 'PAGES_UNEXPECTED' || /unexpected page list/i.test(String(raw || ''))) {
+        return this.t('MSG.PAGES_UNEXPECTED', 'Unexpected page list from the desktop app.');
+      }
+      return this.t('MSG.PAGES_FAILED', 'Could not read existing vault pages.');
+    }
+
     /** Reload projects/bindings and, on desktop, the vault page tree from disk. */
     async refreshAll() {
-      await this.refresh();
-      if (this.canBrowse()) {
-        await this.loadPages({ force: true });
-      }
+      return this.withBusy(async () => {
+        await this.refresh();
+        if (this.canBrowse()) {
+          await this.loadPages({ force: true, busy: false });
+        }
+      });
     }
 
     projectById(id) {
@@ -327,7 +451,21 @@
       const status = Core.vaultConfigStatus(this.state, {
         requirePath: this.canBrowse(),
       });
-      const messages = status.errors.concat(status.warnings);
+      const messages = status.errors.concat(status.warnings).map((code) => {
+        if (code === 'VAULT_PATH_INVALID') {
+          return this.t(
+            'MSG.VAULT_PATH_INVALID',
+            'Vault folder path is missing or invalid. Enter an absolute path to the vault on this computer.',
+          );
+        }
+        if (code === 'VAULT_NAME_EMPTY') {
+          return this.t(
+            'MSG.VAULT_NAME_EMPTY',
+            'Vault name is empty. Obsidian will open the last-used vault.',
+          );
+        }
+        return code;
+      });
       if (!messages.length) {
         el.textContent = '';
         el.classList.add('hidden');
@@ -722,7 +860,7 @@
       if (project && !this.pageQuery) {
         qs('page-search').placeholder = this.t(
           'UI.PAGE_SEARCH_FOR',
-          'Search existing pages… (matches for "{{title}}" are listed first)',
+          'Search existing pages… (matches for "{{title}}" are highlighted)',
           { title: project.title },
         );
       }
@@ -757,23 +895,28 @@
     }
 
     async saveVault() {
-      const next = Core.updateVaultSettings(this.state, {
-        vaultName: qs('vault-name').value,
-        vaultPath: qs('vault-path').value,
+      return this.withBusy(async () => {
+        const next = Core.updateVaultSettings(this.state, {
+          vaultName: qs('vault-name').value,
+          vaultPath: qs('vault-path').value,
+        });
+        if (next.vaultPath !== this.pageCache.vaultPath) {
+          this.invalidatePageCache();
+        }
+        await this.persist(next);
+        this.setStatus(this.t('MSG.VAULT_SAVED', 'Vault settings saved.'), 'success');
+        this.renderVaultWarning();
+        if (this.canBrowse() && next.vaultPath) {
+          await this.loadPages({ force: true, busy: false });
+        }
       });
-      if (next.vaultPath !== this.pageCache.vaultPath) {
-        this.invalidatePageCache();
-      }
-      await this.persist(next);
-      this.setStatus(this.t('MSG.VAULT_SAVED', 'Vault settings saved.'), 'success');
-      this.renderVaultWarning();
-      if (this.canBrowse() && next.vaultPath) {
-        await this.loadPages({ force: true });
-      }
     }
 
     async loadPages(opts) {
       const force = !!(opts && opts.force);
+      const snack = !(opts && opts.snack === false);
+      const manageBusy = !(opts && opts.busy === false);
+      const run = async () => {
       if (!this.canBrowse()) {
         this.setStatus(
           this.t(
@@ -805,16 +948,20 @@
         this.tree = this.pageCache.tree;
         qs('refresh-pages').classList.remove('hidden');
         this.renderPageTree();
+        this.updateLinkEnabled();
         this.setStatus(
           this.t('MSG.PAGES_CACHED', 'Showing {{count}} cached pages. Click Refresh to reload.', {
             count: this.pages.length,
           }),
           'info',
+          { snack },
         );
         return;
       }
 
-      this.setStatus(this.t('MSG.LOADING_PAGES', 'Reading existing vault pages…'), 'info');
+      this.setStatus(this.t('MSG.LOADING_PAGES', 'Reading existing vault pages…'), 'info', {
+        snack,
+      });
       try {
         const result = await PluginAPI.executeNodeScript({
           script: Core.listVaultPagesScript(vaultPath),
@@ -823,8 +970,10 @@
         const parsed = Core.parseNodePageResult(result);
         if (!parsed.ok) {
           this.invalidatePageCache();
-          this.setStatus(parsed.error, 'error');
+          console.error(parsed.error);
+          this.setStatus(this.mapVaultError(parsed), 'error', { snack });
           this.renderPageTree();
+          this.updateLinkEnabled();
           return;
         }
         this.pages = parsed.pages;
@@ -832,22 +981,29 @@
         this.pageCache = { vaultPath, pages: parsed.pages, tree: this.tree };
         qs('refresh-pages').classList.remove('hidden');
         this.renderPageTree();
+        this.updateLinkEnabled();
         this.setStatus(
-          this.t('MSG.PAGES_LOADED', 'Loaded {{count}} existing pages.', {
-            count: this.pages.length,
-          }),
-          'success',
+          parsed.truncated
+            ? this.t(
+                'MSG.PAGES_TRUNCATED',
+                'Loaded {{count}} existing pages (vault walk limit reached; some notes may be missing).',
+                { count: this.pages.length },
+              )
+            : this.t('MSG.PAGES_LOADED', 'Loaded {{count}} existing pages.', {
+                count: this.pages.length,
+              }),
+          parsed.truncated ? 'info' : 'success',
+          { snack },
         );
       } catch (error) {
         this.invalidatePageCache();
-        this.setStatus(
-          error && error.message
-            ? String(error.message)
-            : this.t('MSG.PAGES_FAILED', 'Could not read existing vault pages.'),
-          'error',
-        );
+        console.error(error);
+        this.setStatus(this.mapVaultError(error), 'error', { snack });
         this.renderPageTree();
+        this.updateLinkEnabled();
       }
+      };
+      return manageBusy ? this.withBusy(run) : run();
     }
 
     resolveSelectedPagePath() {
@@ -882,18 +1038,42 @@
         return;
       }
 
-      if (this.canBrowse() && this.pages.length) {
-        const exists = this.pages.some(
-          (page) => (page.path || '') === Core.withMarkdownExtension(pagePath),
+      const check = Core.linkExistingPageCheck(this.canBrowse(), this.pages, pagePath);
+      if (!check.ok) {
+        this.setStatus(
+          this.t(
+            check.code === 'DESKTOP_LOAD_REQUIRED'
+              ? 'MSG.DESKTOP_LOAD_REQUIRED'
+              : 'MSG.PAGE_MUST_EXIST',
+            check.code === 'DESKTOP_LOAD_REQUIRED'
+              ? 'Load existing pages from the vault before linking. The plugin cannot create a new Obsidian page.'
+              : 'Pick a page from the list of existing vault notes. The plugin cannot create a new Obsidian page.',
+          ),
+          'error',
         );
-        if (!exists) {
-          this.setStatus(
-            this.t(
-              'MSG.PAGE_MUST_EXIST',
-              'Pick a page from the list of existing vault notes. The plugin cannot create a new Obsidian page.',
-            ),
-            'error',
-          );
+        return;
+      }
+      if (check.unverified) {
+        this.setStatus(
+          this.t(
+            'UI.MOBILE_UNVERIFIED',
+            'This path is not checked against the vault disk. The note must already exist — the plugin cannot create it.',
+          ),
+          'info',
+          { snack: true },
+        );
+      }
+
+      const existing = Core.getBinding(this.state, projectId);
+      const nextPath = Core.withMarkdownExtension(pagePath);
+      if (existing && Core.bindingTarget(existing) !== nextPath) {
+        const project = this.projectById(projectId);
+        const confirmed = await this.confirmOverwrite(
+          project ? project.title : projectId,
+          Core.bindingTarget(existing),
+          nextPath,
+        );
+        if (!confirmed) {
           return;
         }
       }
@@ -982,7 +1162,43 @@
         });
         return result === this.t('UI.UNLINK', 'Unlink');
       }
-      return true;
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        return window.confirm(
+          this.t(
+            'MSG.CONFIRM_UNLINK',
+            'Remove the Obsidian page link for "{{title}}"? Nothing in the vault is deleted.',
+            { title },
+          ),
+        );
+      }
+      this.setStatus(
+        this.t('MSG.UNLINK_NO_CONFIRM', 'Could not confirm Unlink (no dialog available).'),
+        'error',
+      );
+      return false;
+    }
+
+    async confirmOverwrite(title, currentPath, nextPath) {
+      const message = this.t(
+        'MSG.CONFIRM_OVERWRITE',
+        'Replace the Obsidian page for "{{title}}"? Current: {{current}}. New: {{next}}.',
+        { title, current: currentPath, next: nextPath },
+      );
+      if (typeof PluginAPI.openDialog === 'function') {
+        const result = await PluginAPI.openDialog({
+          title: this.t('UI.EDIT_LINK', 'Change page'),
+          htmlContent: `<p>${escapeHtml(message)}</p>`,
+          buttons: [
+            { label: this.t('UI.CANCEL', 'Cancel') },
+            { label: this.t('UI.LINK', 'Link to selected page'), color: 'warn', raised: true },
+          ],
+        });
+        return result === this.t('UI.LINK', 'Link to selected page');
+      }
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        return window.confirm(message);
+      }
+      return false;
     }
 
     async openCurrent() {
@@ -999,13 +1215,17 @@
 
     async openUri(uri, page) {
       if (!uri) {
-        this.setStatus(this.t('MSG.OPEN_FAILED', 'Could not build the Obsidian URI.'), 'error');
+        this.setStatus(
+          this.t('MSG.URI_BUILD_FAILED', 'Could not build the Obsidian URI.'),
+          'error',
+        );
         return;
       }
       const config = Core.vaultConfigStatus(this.state, { requirePath: false });
       if (config.warnings.length && !this.state.vaultName) {
         this.renderVaultWarning();
       }
+      this.setStatus(this.t('MSG.LAUNCHING_OBSIDIAN', 'Launching Obsidian…'), 'info');
       const result = await Core.openExternalUri(uri, PluginAPI);
       if (result.ok) {
         this.setStatus(
@@ -1028,11 +1248,12 @@
       );
     }
 
-    setStatus(message, tone) {
+    setStatus(message, tone, opts) {
       const el = qs('status');
       el.textContent = message || '';
       el.dataset.tone = tone || '';
-      if (message && PluginAPI.showSnack) {
+      const snack = !opts || opts.snack !== false;
+      if (message && snack && PluginAPI.showSnack) {
         PluginAPI.showSnack({
           msg: message,
           type: tone === 'error' ? 'ERROR' : tone === 'success' ? 'SUCCESS' : 'INFO',

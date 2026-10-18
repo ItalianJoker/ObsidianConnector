@@ -15,9 +15,14 @@
   'use strict';
 
   const STORAGE_VERSION = 3;
-  /** Kept in persisted state for older installs; not used by the page-link UI. */
+  /**
+   * Deprecated persisted field from pre-page-link builds. Still read/written so
+   * older synced state round-trips; the UI never exposes or uses it.
+   */
   const DEFAULT_FOLDER = 'Projects';
   const SKIP_VAULT_DIRS = ['.obsidian', '.trash', '.git', 'node_modules'];
+  const VAULT_WALK_MAX_PAGES = 5000;
+  const VAULT_WALK_MAX_DEPTH = 10;
 
   function createEmptyState() {
     return {
@@ -252,6 +257,7 @@
     if (!normalized) {
       return {
         ok: false,
+        code: 'INVALID_PATH',
         message: 'Choose an existing page inside the vault (no absolute paths or ..).',
       };
     }
@@ -425,39 +431,23 @@
   }
 
   /**
-   * Filter/search existing pages and rank likely project-name matches first.
-   * @param {Array<string|{path?: string, name?: string}>} pages
-   * @param {string} query
-   * @param {string} [projectTitle]
-   * @returns {Array<string|{path?: string, name?: string}>}
+   * Desktop must pick from a loaded vault list. Mobile/web is unverified.
+   * @param {boolean} canBrowse
+   * @param {Array<{path?: string}>} pages
+   * @param {string} pagePath
+   * @returns {{ ok: boolean, unverified?: boolean, code?: string }}
    */
-  function filterPages(pages, query, projectTitle) {
-    const list = Array.isArray(pages) ? pages.slice() : [];
-    const needle = String(query || '').trim().toLowerCase();
-    const filtered = needle
-      ? list.filter((page) => {
-          const path = typeof page === 'string' ? page : page && page.path;
-          const name = typeof page === 'string' ? page : page && page.name;
-          return (
-            String(path || '')
-              .toLowerCase()
-              .includes(needle) ||
-            String(name || '')
-              .toLowerCase()
-              .includes(needle)
-          );
-        })
-      : list;
-    filtered.sort((a, b) => {
-      const pathA = typeof a === 'string' ? a : a.path || '';
-      const pathB = typeof b === 'string' ? b : b.path || '';
-      const rank = rankPage(pathB, projectTitle) - rankPage(pathA, projectTitle);
-      if (rank !== 0) {
-        return rank;
-      }
-      return pathA.localeCompare(pathB);
-    });
-    return filtered;
+  function linkExistingPageCheck(canBrowse, pages, pagePath) {
+    if (!canBrowse) {
+      return { ok: true, unverified: true };
+    }
+    const list = Array.isArray(pages) ? pages : [];
+    if (!list.length) {
+      return { ok: false, code: 'DESKTOP_LOAD_REQUIRED' };
+    }
+    const target = withMarkdownExtension(pagePath);
+    const exists = list.some((page) => (page && page.path ? page.path : page) === target);
+    return exists ? { ok: true } : { ok: false, code: 'PAGE_MUST_EXIST' };
   }
 
   /**
@@ -707,12 +697,10 @@
     const vaultPath = state ? normalizeVaultRootPath(state.vaultPath) : '';
 
     if (requirePath && !vaultPath) {
-      errors.push(
-        'Vault folder path is missing or invalid. Enter an absolute path to the vault on this computer.',
-      );
+      errors.push('VAULT_PATH_INVALID');
     }
     if (!vaultName) {
-      warnings.push('Vault name is empty. Obsidian will open the last-used vault.');
+      warnings.push('VAULT_NAME_EMPTY');
     }
     return { ok: errors.length === 0, errors, warnings };
   }
@@ -733,7 +721,7 @@ if (!root || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
 const skip = new Set(${JSON.stringify(SKIP_VAULT_DIRS)});
 const pages = [];
 function walk(dir, rel, depth) {
-  if (depth > 10 || pages.length >= 5000) {
+  if (depth > ${VAULT_WALK_MAX_DEPTH} || pages.length >= ${VAULT_WALK_MAX_PAGES}) {
     return;
   }
   let names;
@@ -769,30 +757,50 @@ function walk(dir, rel, depth) {
   }
 }
 walk(root, '', 0);
-return pages;
+return { pages, truncated: pages.length >= ${VAULT_WALK_MAX_PAGES} };
 `;
   }
 
-  /** Parse executeNodeScript results into { ok, pages, error }. */
+  function vaultReadErrorCode(error) {
+    const text = String(error || '');
+    if (/vault folder not found/i.test(text)) {
+      return 'VAULT_NOT_FOUND';
+    }
+    if (/unexpected page list/i.test(text)) {
+      return 'PAGES_UNEXPECTED';
+    }
+    return 'PAGES_FAILED';
+  }
+
+  /** Parse executeNodeScript results into { ok, pages, error, code, truncated }. */
   function parseNodePageResult(result) {
     if (!result || result.success === false) {
       const error =
         (result && result.error && result.error.message) ||
         (result && result.error) ||
         'Could not read the vault folder.';
-      return { ok: false, pages: [], error: String(error) };
+      const text = String(error);
+      return { ok: false, pages: [], error: text, code: vaultReadErrorCode(text), truncated: false };
     }
     const raw = result.result;
-    if (!Array.isArray(raw)) {
+    const list = Array.isArray(raw)
+      ? raw
+      : raw && Array.isArray(raw.pages)
+        ? raw.pages
+        : null;
+    const truncated = !!(raw && !Array.isArray(raw) && raw.truncated);
+    if (!list) {
       return {
         ok: false,
         pages: [],
         error: 'Unexpected page list from the desktop app.',
+        code: 'PAGES_UNEXPECTED',
+        truncated: false,
       };
     }
 
     const pages = [];
-    for (const item of raw) {
+    for (const item of list) {
       let pathValue = '';
       let name = '';
       if (typeof item === 'string') {
@@ -819,7 +827,7 @@ return pages;
         name: stripMarkdownExtension(name || notePath.split('/').pop() || notePath),
       });
     }
-    return { ok: true, pages, error: '' };
+    return { ok: true, pages, error: '', code: '', truncated };
   }
 
   function visibleProjects(projects) {
@@ -893,7 +901,9 @@ return { ok: true, via: 'os' };
       frame.style.cssText = 'display:none;width:0;height:0;border:0;position:absolute';
       frame.src = uri;
       document.body.appendChild(frame);
-      setTimeout(() => {
+      clearHiddenIframeTimer();
+      hiddenIframeTimer = setTimeout(() => {
+        hiddenIframeTimer = 0;
         if (frame.parentNode) {
           frame.parentNode.removeChild(frame);
         }
@@ -926,12 +936,21 @@ return { ok: true, via: 'os' };
   /** Delay before re-sending `obsidian://open` so a cold-started app can take the file. */
   const OPEN_RETRY_DELAY_MS = 2200;
   let pendingOpenRetry = 0;
+  let hiddenIframeTimer = 0;
+
+  function clearHiddenIframeTimer() {
+    if (hiddenIframeTimer) {
+      clearTimeout(hiddenIframeTimer);
+      hiddenIframeTimer = 0;
+    }
+  }
 
   function cancelScheduledOpenRetry() {
     if (pendingOpenRetry) {
       clearTimeout(pendingOpenRetry);
       pendingOpenRetry = 0;
     }
+    clearHiddenIframeTimer();
   }
 
   /**
@@ -1072,6 +1091,8 @@ return { ok: true, via: 'os' };
     STORAGE_VERSION,
     DEFAULT_FOLDER,
     SKIP_VAULT_DIRS,
+    VAULT_WALK_MAX_PAGES,
+    VAULT_WALK_MAX_DEPTH,
     createEmptyState,
     parseState,
     serializeState,
@@ -1090,7 +1111,7 @@ return { ok: true, via: 'os' };
     removeBinding,
     updateVaultSettings,
     visibleProjects,
-    filterPages,
+    linkExistingPageCheck,
     filterBindings,
     filterNoteTree,
     buildNoteTree,
@@ -1110,6 +1131,7 @@ return { ok: true, via: 'os' };
     openObsidianUriScript,
     OPEN_RETRY_DELAY_MS,
     cancelScheduledOpenRetry,
+    clearHiddenIframeTimer,
     dispatchOpenUri,
     openExternalUri,
     copyText,

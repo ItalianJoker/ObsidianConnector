@@ -90,6 +90,10 @@
       snacks.push(cfg);
     },
     async openDialog(cfg) {
+      if (params.get('confirm') === 'cancel') {
+        const cancel = (cfg.buttons || []).find((button) => button.color !== 'warn');
+        return cancel ? cancel.label : undefined;
+      }
       const unlink = (cfg.buttons || []).find((button) => button.color === 'warn');
       return unlink ? unlink.label : undefined;
     },

@@ -291,8 +291,8 @@ describe('vaultConfigStatus', () => {
       requirePath: true,
     });
     assert.equal(missing.ok, false);
-    assert.equal(missing.errors.length, 1);
-    assert.equal(missing.warnings.length, 1);
+    assert.deepEqual(missing.errors, ['VAULT_PATH_INVALID']);
+    assert.deepEqual(missing.warnings, ['VAULT_NAME_EMPTY']);
 
     const ok = Core.vaultConfigStatus(
       { vaultName: 'Work', vaultPath: '/home/you/Vault' },
@@ -305,15 +305,32 @@ describe('vaultConfigStatus', () => {
 });
 
 describe('page ranking', () => {
-  it('lists likely project-name matches first', () => {
-    const pages = [
-      'Inbox.md',
-      'Projects/Website.md',
-      'Work/Elmec.md',
-      'Archive.md',
-    ];
-    const ranked = Core.filterPages(pages, '', 'Elmec');
-    assert.equal(ranked[0], 'Work/Elmec.md');
+  it('ranks likely project-name matches higher (tree highlight, not sort)', () => {
+    assert.ok(Core.rankPage('Work/Elmec.md', 'Elmec') > Core.rankPage('Inbox.md', 'Elmec'));
+    assert.ok(Core.rankPage('Work/Elmec.md', 'Elmec') >= 3);
+  });
+});
+
+describe('linkExistingPageCheck', () => {
+  const pages = [{ path: 'Work/Elmec.md' }];
+
+  it('blocks desktop link when the vault list is empty', () => {
+    const blocked = Core.linkExistingPageCheck(true, [], 'Work/Elmec.md');
+    assert.equal(blocked.ok, false);
+    assert.equal(blocked.code, 'DESKTOP_LOAD_REQUIRED');
+  });
+
+  it('blocks desktop link when the path is not in the loaded list', () => {
+    const missing = Core.linkExistingPageCheck(true, pages, 'Missing.md');
+    assert.equal(missing.ok, false);
+    assert.equal(missing.code, 'PAGE_MUST_EXIST');
+  });
+
+  it('allows a loaded desktop page and marks mobile as unverified', () => {
+    assert.equal(Core.linkExistingPageCheck(true, pages, 'Work/Elmec.md').ok, true);
+    const mobile = Core.linkExistingPageCheck(false, [], 'Work/Elmec.md');
+    assert.equal(mobile.ok, true);
+    assert.equal(mobile.unverified, true);
   });
 });
 
@@ -329,9 +346,10 @@ describe('vault page listing', () => {
     fs.writeFileSync(path.join(tmp, 'readme.txt'), 'ignore');
 
     const script = Core.listVaultPagesScript(tmp);
-    const pages = new Function('require', script)(require);
-    const paths = pages.map((page) => page.path).sort();
+    const listed = new Function('require', script)(require);
+    const paths = listed.pages.map((page) => page.path).sort();
 
+    assert.equal(listed.truncated, false);
     assert.deepEqual(paths, ['Projects/Website.md', 'Work/Elmec.md']);
   });
 
@@ -346,6 +364,22 @@ describe('vault page listing', () => {
     assert.equal(parsed.ok, true);
     assert.equal(parsed.pages.length, 2);
     assert.equal(parsed.pages[0].path, 'Work/Elmec.md');
+    assert.equal(parsed.truncated, false);
+
+    const wrapped = Core.parseNodePageResult({
+      success: true,
+      result: { pages: [{ path: 'Inbox.md', name: 'Inbox' }], truncated: true },
+    });
+    assert.equal(wrapped.ok, true);
+    assert.equal(wrapped.truncated, true);
+    assert.equal(wrapped.pages[0].path, 'Inbox.md');
+
+    const missing = Core.parseNodePageResult({
+      success: false,
+      error: { message: 'Vault folder not found' },
+    });
+    assert.equal(missing.ok, false);
+    assert.equal(missing.code, 'VAULT_NOT_FOUND');
   });
 });
 

@@ -52,6 +52,8 @@ describe('plugin package', () => {
     assert.match(html, /id="refresh-pages"/);
     assert.match(html, /id="linked-toggle"/);
     assert.match(html, /id="linked-search"/);
+    assert.match(html, /id="mobile-unverified"/);
+    assert.doesNotMatch(html, /page-fade/);
     assert.match(html, /role="tree"/);
     assert.match(html, /class="banner-text"/);
     const css = fs.readFileSync(path.join(root, 'src/styles.css'), 'utf8');

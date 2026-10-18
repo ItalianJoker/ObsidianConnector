@@ -2,6 +2,24 @@
 
 All notable changes to Obsidian Connector are documented in this file.
 
+## [1.1.1] - 2026-10-18
+
+Patch after 1.1.0: audit remediation (blockers + UX + teardown). Not a feature release.
+
+### Fixed
+
+- Desktop **Link** is blocked until existing vault pages are loaded (no unverified `.md` invent)
+- Unlink always confirms (`openDialog`, else `window.confirm`; abort if neither)
+- Confirm before overwriting an existing project binding
+- Overflow containment (from #7) and cold-start **file** retry (~2.2s, same encoded URI)
+- Vault errors mapped to i18n; Load/Save/Refresh `disabled` + `aria-busy`
+- Search copy: matches are **highlighted**, not “listed first”
+- Snacks only on user actions; passive hook refresh stays inline
+- `destroy()` on `pagehide` / `beforeunload` (debounce, open retry, listeners)
+- Dead `filterPages` removed; `defaultFolder` documented as deprecated persisted field
+
+[1.1.1]: https://github.com/ItalianJoker/ObsidianConnector/releases/tag/v1.1.1
+
 ## [1.1.0] - 2026-10-13
 
 Minor bump: user-facing panel behavior changes (tree view, on-demand linked list, Refresh, cold-start open). Product invariants are unchanged — existing projects → existing pages, `obsidian://open` only.
